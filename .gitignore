@@ -1,6 +1,3 @@
-# Ignore configuration file.
-configuration.plist
-
 # Created by https://www.gitignore.io/api/swift,xcode,appcode
 
 .DS_Store
@@ -136,5 +133,4 @@ build
 # End of https://www.gitignore.io/api/swift,xcode,appcode
 
 ### Firebase ###
-**/GoogleService-Info*.plist
 **/*firebase-crashreporting.json
