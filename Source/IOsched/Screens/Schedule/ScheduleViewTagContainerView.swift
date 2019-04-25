@@ -19,28 +19,17 @@ import MaterialComponents
 
 class ScheduleViewTagContainerView: TagContainerView {
 
-  var viewModel: [TagEventViewModel]? {
+  var tags: [EventTag] {
     didSet {
-      switch (viewModel, oldValue) {
-      case (.none, .none):
-        break // nothing
-      case (.none, .some):
-        updateFromViewModel()
-      case (.some, .none):
-        updateFromViewModel()
-      case (.some, .some):
-        guard let viewModel = viewModel, let oldModel = oldValue else {
-          // nothing
-          break
-        }
-        if viewModel != oldModel {
-          updateFromViewModel()
-        }
+      if oldValue != tags {
+        updateFromTags()
+        invalidateIntrinsicContentSize()
       }
     }
   }
 
   override init(frame: CGRect) {
+    self.tags = []
     super.init(frame: frame)
     setupViews()
   }
@@ -50,15 +39,12 @@ class ScheduleViewTagContainerView: TagContainerView {
   }
 
   private func setupViews() {
-    updateFromViewModel()
+    updateFromTags()
   }
 
-  fileprivate func updateFromViewModel() {
-    defer {
-      invalidateIntrinsicContentSize()
-    }
+  private func updateFromTags() {
 
-    guard let viewModel = viewModel else {
+    guard !tags.isEmpty else {
       for view in subviews {
         view.removeFromSuperview()
       }
@@ -66,7 +52,7 @@ class ScheduleViewTagContainerView: TagContainerView {
     }
 
     // determine number of additional (or superfluous) buttons
-    let difference = subviews.count - viewModel.count
+    let difference = subviews.count - tags.count
     if difference > 0 {
       // remove any superfluous buttons
       for view in subviews.suffix(difference).reversed() {
@@ -84,14 +70,13 @@ class ScheduleViewTagContainerView: TagContainerView {
     }
 
     var index = 0
-    for tag in viewModel {
+    for tag in tags {
       guard let tagButton = subviews[index] as? TagButton else {
         continue
       }
-      tagButton.setElevation(ShadowElevation(rawValue: 0), for: UIControlState())
+      tagButton.setElevation(ShadowElevation(rawValue: 0), for: UIControl.State())
       tagButton.setTitle(tag.name, for: .normal)
-      let color = UIColor(hex: tag.color)
-      tagButton.setBackgroundColor(color, for: .normal)
+      tagButton.setBackgroundColor(tag.color, for: .normal)
 
       index += 1
     }

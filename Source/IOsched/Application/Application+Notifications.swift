@@ -16,9 +16,8 @@
 
 import UIKit
 import UserNotifications
-import Firebase
-import Domain
-import Platform
+import FirebaseMessaging
+import FirebaseFirestore
 
 extension Application {
 
@@ -59,13 +58,13 @@ extension AppDelegate {
   }
 
   func performOrUpdateRegistration() {
-    guard let _ = InstanceID.instanceID().token() else {
+    guard Messaging.messaging().fcmToken != nil else {
       print("ID token not yet available.")
       return
     }
 
     // register ID token on server
-    DefaultServiceLocator.sharedInstance.userState.registerForSyncMessages()
+    DefaultServiceLocator.sharedInstance.userState.registerForFCM()
   }
 }
 
@@ -86,44 +85,21 @@ extension AppDelegate: MessagingDelegate {
   // Receive data message on iOS 10 devices while app is in the foreground.
   func messaging(_ messaging: Messaging, didReceive remoteMessage: MessagingRemoteMessage) {
     print("Received remote message \(remoteMessage)")
-    if let action = remoteMessage.appData["action"] as? String {
-      if action == Actions.syncEventData {
-        self.syncEventData(fetchCompletionHandler: { (result: UIBackgroundFetchResult) in })
-      }
-      else if action == Actions.promotion {
-        self.syncUserData(fetchCompletionHandler: { (result: UIBackgroundFetchResult) in })
-      }
-    }
   }
 
   // Receive silent notifications, iOS style
   func application(_ application: UIApplication,
-                   didReceiveRemoteNotification userInfo: [AnyHashable : Any],
+                   didReceiveRemoteNotification userInfo: [AnyHashable: Any],
                    fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
-
-    if let action = userInfo["action"] as? String {
-      print("Remote notification action: \(action)")
-      if action == Actions.syncEventData {
-        self.syncEventData(fetchCompletionHandler: completionHandler)
+    // Do a manual fetch. The downloaded data will be cached by Firestore. This callback
+    // could be used to fetch user data as well, but I don't want to introduce an Auth dependency
+    // to this class.
+    Firestore.firestore().scheduleDetails.getDocuments { (_, error) in
+      if error != nil {
+        completionHandler(.failed)
+      } else {
+        completionHandler(.newData)
       }
-      else if action == Actions.promotion {
-        self.syncUserData(fetchCompletionHandler: completionHandler)
-      }
-    }
-  }
-
-  private func syncEventData(fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
-    DefaultServiceLocator.sharedInstance.updateConferenceData {
-      completionHandler(.newData)
-    }
-  }
-  
-  private func syncUserData(fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
-    DefaultServiceLocator.sharedInstance.bookmarkStore.sync {
-      completionHandler(.newData)
-    }
-    DefaultServiceLocator.sharedInstance.reservationStore.sync {
-      completionHandler(.newData)
     }
   }
 
@@ -183,12 +159,14 @@ extension Notification.Name {
 /// Class responsible for writing and requesting notifications permissions.
 final class NotificationPermissions {
 
+  private var notificationCenterObserver: AnyObject?
+
   @available(iOS 10.0, *)
   static let authOptions: UNAuthorizationOptions = [.alert, .sound, .badge]
 
   static let notificationTypes: UIUserNotificationType = [.alert, .sound, .badge]
 
-  private let userState: WritableUserState
+  private let userState: PersistentUserState
   private let application: UIApplication
 
   private var successObserver: Any? {
@@ -223,19 +201,22 @@ final class NotificationPermissions {
     }
   }
 
-  init(userState: WritableUserState, application: UIApplication) {
+  init(userState: PersistentUserState, application: UIApplication) {
     self.userState = userState
     self.application = application
-    
-    NotificationCenter.default.addObserver(forName: .userRegistrationStateDidUpdate,
-                                           object: nil,
-                                           queue: nil) { (notification: Notification) in
+
+    notificationCenterObserver =
+        NotificationCenter.default.addObserver(forName: .userRegistrationStateDidUpdate,
+                                               object: nil,
+                                               queue: nil) { _ in
       self.subscribeToTopics()
     }
   }
-  
+
   deinit {
-    NotificationCenter.default.removeObserver(self)
+    if let observer = notificationCenterObserver {
+      NotificationCenter.default.removeObserver(observer)
+    }
   }
 
   /// Setting this to true will request notifications permissions if they aren't already granted
@@ -294,7 +275,7 @@ final class NotificationPermissions {
     })
 
     // Used to detect when the notifications alert has been dismissed.
-    activeObserver = NotificationCenter.default.addObserver(forName: .UIApplicationDidBecomeActive,
+    activeObserver = NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification,
                                                             object: nil,
                                                             queue: nil,
                                                             using: { (_) in
@@ -302,17 +283,18 @@ final class NotificationPermissions {
       self.activeObserver = nil
     })
 
+    /* // Disable visible notifications for 2019.
     if #available(iOS 10.0, *) {
       let options = NotificationPermissions.authOptions
       UNUserNotificationCenter.current().requestAuthorization(options: options) { (_, _) in
         // This callback is handled by the app delegate methods for iOS 9 compatibility.
       }
-    }
-    else {
+    } else {
       let types = NotificationPermissions.notificationTypes
       let settings = UIUserNotificationSettings(types: types, categories: nil)
       application.registerUserNotificationSettings(settings)
     }
+    */
   }
 
   private func invokeCompletionHandler(granted: Bool, completion: ((Bool) -> Void)? = nil) {
@@ -337,7 +319,7 @@ final class NotificationPermissions {
       Messaging.messaging().subscribe(toTopic: $0)
     }
     // Subscribe only if user is an IO attendee.
-    if (userState.isUserRegistered) {
+    if userState.isUserRegistered {
       NotificationPermissions.fcmRegisteredTopics.forEach {
         Messaging.messaging().subscribe(toTopic: $0)
       }
@@ -348,7 +330,7 @@ final class NotificationPermissions {
     NotificationPermissions.fcmTopics.forEach {
       Messaging.messaging().unsubscribe(fromTopic: $0)
     }
-    if (userState.isUserRegistered) {
+    if userState.isUserRegistered {
       NotificationPermissions.fcmRegisteredTopics.forEach {
         Messaging.messaging().unsubscribe(fromTopic: $0)
       }

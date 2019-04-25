@@ -19,63 +19,77 @@ import FirebaseAuth
 
 public extension Firestore {
 
+  private var root: DocumentReference {
+    return document("google_io_events/2019")
+  }
+
   // MARK: - Top-level collections
 
   /// Returns the top-level users collection.
-  public var users: CollectionReference {
-    return self.collection("users")
+  var users: CollectionReference {
+    return root.collection("users")
   }
 
   /// Returns the top-level schedule summaries collection.
-  public var scheduleSummaries: CollectionReference {
-    return self.collection("scheduleSummary")
+  var scheduleSummaries: CollectionReference {
+    return root.collection("scheduleSummary")
   }
 
   /// Returns all the schedule details collection.
-  public var scheduleDetails: CollectionReference {
-    return self.collection("scheduleDetail")
+  var scheduleDetails: CollectionReference {
+    return root.collection("scheduleDetail")
   }
 
   /// Returns the top-level event detail collection.
-  public var events: CollectionReference {
-    return self.collection("events")
+  var events: CollectionReference {
+    return root.collection("events")
+  }
+
+  /// Returns the top-level feed item collection.
+  var feed: CollectionReference {
+    return root.collection("feed")
   }
 
   // MARK: - Session details
 
   /// Returns the schedule detail document with the given ID.
-  public func scheduleDetail(scheduleID: String) -> DocumentReference {
-    return self.scheduleDetails.document(scheduleID)
+  func scheduleDetail(scheduleID: String) -> DocumentReference {
+    return scheduleDetails.document(scheduleID)
   }
 
   // MARK: - User Events
 
   /// Returns a collection of UserEvents for the given user.
-  public func userEvents(for user: UserInfo) -> CollectionReference {
-    return self.userDocument(for: user).collection("events")
+  func userEvents(for user: UserInfo) -> CollectionReference {
+    return userDocument(for: user).collection("events")
+  }
+
+  /// Returns the collection of UserEvents that have nonnull reservation statuses.
+  func reservations(for user: UserInfo) -> Query {
+    return userEvents(for: user).whereField("reservationStatus", isGreaterThanOrEqualTo: "")
   }
 
   /// Returns a document reference pointing to user data for a particular event.
-  public func userEvent(for user: UserInfo, withSessionID sessionID: String) -> DocumentReference {
-    return self.userEvents(for: user).document(sessionID)
+  func userEvent(for user: UserInfo, withSessionID sessionID: String) -> DocumentReference {
+    return userEvents(for: user).document(sessionID)
   }
 
   // MARK: - User Document
 
   /// Returns the user document for the provided user.
-  public func userDocument(for user: UserInfo) -> DocumentReference {
-    return self.users.document(user.uid)
+  func userDocument(for user: UserInfo) -> DocumentReference {
+    return users.document(user.uid)
   }
 
   /// Sets the last visited timestamp for the provided user.
-  public func setLastVisited(_ date: Date, for user: UserInfo) {
+  func setLastVisitedDate(for user: UserInfo) {
     let document = userDocument(for: user)
     document.setData(["lastUsage": FieldValue.serverTimestamp()], merge: true)
   }
 
   /// Returns the reservation queue document for the provided user.
-  public func reservationQueue(for user: UserInfo) -> DocumentReference {
-    return self.collection("queue").document(user.uid)
+  func reservationQueue(for user: UserInfo) -> DocumentReference {
+    return root.collection("queue").document(user.uid)
   }
 
   // MARK: - FCM Tokens
@@ -84,8 +98,8 @@ public extension Firestore {
 
   /// Associates the device's FCM token with the user on the server. Should be invoked when
   /// a new user session begins.
-  public func setToken(_ fcmToken: String, for user: UserInfo) {
-    let tokenDocument = self.collection("users")
+  func setToken(_ fcmToken: String, for user: UserInfo) {
+    let tokenDocument = root.collection("users")
         .document(user.uid)
         .collection("fcmTokens")
         .document(fcmToken)
@@ -99,8 +113,8 @@ public extension Firestore {
   }
 
   /// Removes the user-to-device association on the server. This should be invoked on signout.
-  public func removeToken(_ fcmToken: String, for user: UserInfo) {
-    let tokenDocument = self.collection("users")
+  func removeToken(_ fcmToken: String, for user: UserInfo) {
+    let tokenDocument = root.collection("users")
         .document(user.uid)
         .collection("fcmTokens")
         .document(fcmToken)

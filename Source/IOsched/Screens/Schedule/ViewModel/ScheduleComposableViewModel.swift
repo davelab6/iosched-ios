@@ -17,11 +17,14 @@
 import UIKit
 import MaterialComponents
 
-class ScheduleComposableViewModel: ComposableViewModel, DaySelectable {
+class ScheduleDisplayableViewModel {
 
-  let wrappedModel: ScheduleViewModel
+  private(set) var wrappedModel: ScheduleViewModel
   var selectedDay = 0
-  fileprivate var cachedHeights: [ConferenceEventViewModel: CGFloat] = [:]
+
+  /// A map to store cell height calculations for faster layout. This is invalidated whenever the
+  /// user's device font size changes.
+  fileprivate var cachedHeights: [SessionViewModel: CGFloat] = [:]
 
   lazy var measureCell: ScheduleViewCollectionViewCell = self.setupMeasureCell()
 
@@ -33,11 +36,27 @@ class ScheduleComposableViewModel: ComposableViewModel, DaySelectable {
     self.wrappedModel = wrappedModel
   }
 
-}
+  var conferenceDays: [ConferenceDayViewModel] {
+    return wrappedModel.conferenceDays
+  }
 
-// MARK: - ComposableViewModelLayout
+  func filterSelected() {
+    wrappedModel.didSelectFilter()
+  }
 
-extension ScheduleComposableViewModel: ComposableViewModelLayout {
+  func didSelectAccount() {
+    wrappedModel.didSelectAccount()
+  }
+
+  func showOnlySavedEvents() {
+    wrappedModel.shouldShowOnlySavedItems = true
+  }
+
+  func showAllEvents() {
+    wrappedModel.shouldShowOnlySavedItems = false
+  }
+
+// MARK: - ScheduleViewModelLayout
 
   func sizeForHeader(inSection section: Int, inFrame frame: CGRect) -> CGSize {
     return CGSize(width: frame.size.width, height: MDCCellDefaultOneLineHeight)
@@ -62,64 +81,91 @@ extension ScheduleComposableViewModel: ComposableViewModelLayout {
     cachedHeights = [:]
   }
 
-}
+  func backgroundColor(at indexPath: IndexPath) -> UIColor {
+    return .white
+  }
 
-// MARK: - ComposableViewModelDataSource
-
-extension ScheduleComposableViewModel: ComposableViewModelDataSource {
+// MARK: - ScheduleViewModelDataSource
 
   func numberOfSections() -> Int {
-    return wrappedModel.slots(forDayWithIndex: selectedDay)?.count ?? 0
+    return wrappedModel.slots(forDayWithIndex: selectedDay).count
   }
 
   func numberOfItemsIn(section: Int) -> Int {
-    return wrappedModel.events(forDayWithIndex: selectedDay, andSlotIndex: section)?.count ?? 0
+    return wrappedModel.events(forDayWithIndex: selectedDay, andSlotIndex: section).count
   }
 
-  func cellClassForItemAt(indexPath: IndexPath) -> UICollectionViewCell.Type? {
+  func cellClassForItemAt(indexPath: IndexPath) -> UICollectionViewCell.Type {
     return ScheduleViewCollectionViewCell.self
   }
 
-  func session(forIndexPath indexPath: IndexPath) -> ConferenceEventViewModel? {
+  func session(forIndexPath indexPath: IndexPath) -> SessionViewModel? {
     let events = wrappedModel.events(forDayWithIndex: selectedDay, andSlotIndex: indexPath.section)
-    return events?[indexPath.row]
+    guard indexPath.row < events.count else {
+      return nil
+    }
+    return events[indexPath.row]
   }
 
   func populateCell(_ cell: UICollectionViewCell, forItemAt indexPath: IndexPath) {
     guard let cell = cell as? ScheduleViewCollectionViewCell else { return }
     if let session = session(forIndexPath: indexPath) {
       cell.viewModel = session
-      cell.isUserInteractionEnabled = session.isNavigatable
-      cell.onBookmarkTapped { sessionId in
-        self.wrappedModel.toggleBookmark(sessionId: sessionId)
+      cell.isUserInteractionEnabled = true
+      cell.onBookmarkTapped { sessionID in
+        self.wrappedModel.toggleBookmark(sessionID: sessionID)
       }
     }
   }
 
-  func supplementaryViewClass(ofKind kind: String, forItemAt indexPath: IndexPath) -> UICollectionReusableView.Type? {
+  func supplementaryViewClass(ofKind kind: String,
+                              forItemAt indexPath: IndexPath) -> UICollectionReusableView.Type {
     return IOSchedCollectionViewHeaderCell.self
   }
 
   func populateSupplementaryView(_ view: UICollectionReusableView, forItemAt indexPath: IndexPath) {
     if let sectionHeader = view as? IOSchedCollectionViewHeaderCell {
-      let slot = wrappedModel.slots(forDayWithIndex: selectedDay)?[indexPath.section]
-      sectionHeader.date = slot?.time
+      let slot = wrappedModel.slots(forDayWithIndex: selectedDay)[indexPath.section]
+      sectionHeader.date = slot.time
     }
   }
 
   func didSelectItemAt(indexPath: IndexPath) {
     let events = wrappedModel.events(forDayWithIndex: selectedDay, andSlotIndex: indexPath.section)
-    if let event = events?[indexPath.row] {
-      wrappedModel.didSelectSession(event)
-    }
+    let event = events[indexPath.row]
+    wrappedModel.didSelectSession(event)
   }
 
   func previewViewControllerForItemAt(indexPath: IndexPath) -> UIViewController? {
     let events = wrappedModel.events(forDayWithIndex: selectedDay, andSlotIndex: indexPath.section)
-    if let event = events?[indexPath.row], event.isNavigatable == true {
-      return wrappedModel.detailsViewController(for: event)
+    let event = events[indexPath.row]
+    return wrappedModel.detailsViewController(for: event)
+  }
+
+  func isEmpty() -> Bool {
+    for i in 0 ..< numberOfSections() {
+      if numberOfItemsIn(section: i) > 0 {
+        return false
+      }
     }
-    return nil
+    return true
+  }
+
+  func isEmpty(forDayWithIndex index: Int) -> Bool {
+    return wrappedModel.slots(forDayWithIndex: index).count == 0
+  }
+
+// MARK: - View updates
+
+  var viewUpdateCallback: ((_ indexPath: IndexPath?) -> Void)?
+  func onUpdate(_ viewUpdateCallback: @escaping (_ indexPath: IndexPath?) -> Void) {
+    wrappedModel.onUpdate { indexPath in
+      viewUpdateCallback(indexPath)
+    }
+  }
+
+  func updateModel() {
+    wrappedModel.updateModel()
   }
 
 }

@@ -18,52 +18,7 @@ import Foundation
 
 public struct TimeUtils {
 
-  /// Pacific time zone.
+  /// Pacific time zone. (PDT)
   public static let pacificTimeZone = TimeZone(identifier: "America/Los_Angeles")!
-
-  private struct Constants {
-    /// Formatter for reading time stamps from the json. Not for the modified date.
-    static var TimeStampDateFormatter: DateFormatter = {
-      let dateFormatter = DateFormatter()
-
-      return dateFormatter
-    }()
-
-    static let DateFormats = [
-      "yyyy-MM-dd'T'HH:mm:ssZZZZZ",
-      "yyyy-MM-dd'T'HH:mm:ssZ",
-      "yyyy-MM-dd'T'HH:mm:ss.SSSZ",
-      "yyyy-MM-dd'T'HH:mm:ss Z",
-      "yyyy-MM-dd'T'HH:mm:ssZ",
-      "yyyy-MM-dd HH:mm:ss Z"
-      ]
-  }
-
-  static func dateFromString(_ timeStamp: String) -> Date? {
-    var date: Date? = nil
-
-    for dateFormat in Constants.DateFormats {
-      Constants.TimeStampDateFormatter.dateFormat = dateFormat
-      date = Constants.TimeStampDateFormatter.date(from: timeStamp)
-
-      if date != nil {
-        break
-      }
-    }
-
-    return date
-  }
-
-  static func timeStampFromDate(_ date: Date?) -> String {
-    guard let date = date else {
-      return ""
-    }
-
-    let dateFormat = Constants.DateFormats.first!
-    Constants.TimeStampDateFormatter.dateFormat = dateFormat
-    Constants.TimeStampDateFormatter.timeZone = TimeZone.init(secondsFromGMT: 0)
-
-    return Constants.TimeStampDateFormatter.string(from: date)
-  }
 
 }

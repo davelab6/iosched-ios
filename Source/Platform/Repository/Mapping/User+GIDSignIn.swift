@@ -15,7 +15,6 @@
 //
 
 import Foundation
-import Domain
 import GoogleSignIn
 
 extension User {
@@ -30,6 +29,6 @@ extension User {
         let imageURLString = profile.imageURL(withDimension: 72 * 3)?.absoluteString else {
       return nil
     }
-    self.init(id: id, name: name, email: email, thumbnailUrl: imageURLString)
+    self.init(id: id, name: name, email: email, thumbnailURL: imageURLString)
   }
 }

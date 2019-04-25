@@ -23,16 +23,16 @@ class SessionDetailsCollectionViewMainInfoCell: MDCCollectionViewCell {
     static let titleColor = "#424242"
     static let descriptionColor = "#747474"
 
-    static let titleHeight: CGFloat = 24.0
-    static let titleFontName = "Product Sans"
-    static let titleFont = UIFont(name: Constants.titleFontName, size: Constants.titleHeight)
-
-    static let priorityHigherThanHigh: Float = 751.0
-
+    static let titleFont = ProductSans.regular.style(.title2)
     static let buttonColor = UIColor.white
     static let rateButtonTitle =
       NSLocalizedString("Rate session",
                         comment: "Button title that will launch session rating.")
+
+    static let processingText = NSLocalizedString(
+      "Processing, please wait",
+      comment: "Text to show on the reservation button while it's still processing"
+    )
     static let rateButtonTitleColor = UIColor(hex: "#5565FD")
     static let rateButtonBorderColor = UIColor(hex: "#DADCE0")
   }
@@ -78,8 +78,8 @@ class SessionDetailsCollectionViewMainInfoCell: MDCCollectionViewCell {
     label.textColor = textColor
     label.numberOfLines = 0
 
-    label.setContentCompressionResistancePriority(UILayoutPriority(rawValue: Constants.priorityHigherThanHigh), for: .vertical)
-    label.setContentCompressionResistancePriority(UILayoutPriority(rawValue: Constants.priorityHigherThanHigh), for: .horizontal)
+    label.setContentCompressionResistancePriority(.required, for: .vertical)
+    label.setContentCompressionResistancePriority(.required, for: .horizontal)
 
     return label
   }
@@ -87,7 +87,8 @@ class SessionDetailsCollectionViewMainInfoCell: MDCCollectionViewCell {
   private func setupDateAndTimeLabel() -> UILabel {
     let label = UILabel()
     label.translatesAutoresizingMaskIntoConstraints = false
-    label.font = MDCTypography.body1Font()
+    label.font = UIFont.mdc_preferredFont(forMaterialTextStyle: .body1)
+    label.enableAdjustFontForContentSizeCategory()
     label.textColor = textColor
     label.numberOfLines = 0
     return label
@@ -96,7 +97,8 @@ class SessionDetailsCollectionViewMainInfoCell: MDCCollectionViewCell {
   private func setupLocationLabel() -> UILabel {
     let label = UILabel()
     label.translatesAutoresizingMaskIntoConstraints = false
-    label.font = MDCTypography.body1Font()
+    label.font = UIFont.mdc_preferredFont(forMaterialTextStyle: .body1)
+    label.enableAdjustFontForContentSizeCategory()
     label.textColor = textColor
     label.numberOfLines = 0
     return label
@@ -105,7 +107,8 @@ class SessionDetailsCollectionViewMainInfoCell: MDCCollectionViewCell {
   private func setupDetailsLabel() -> UILabel {
     let label = UILabel()
     label.translatesAutoresizingMaskIntoConstraints = false
-    label.font = MDCTypography.body1Font()
+    label.font = UIFont.mdc_preferredFont(forMaterialTextStyle: .body1)
+    label.enableAdjustFontForContentSizeCategory()
     label.textColor = UIColor(hex: Constants.descriptionColor)
     label.numberOfLines = 0
     return label
@@ -114,6 +117,7 @@ class SessionDetailsCollectionViewMainInfoCell: MDCCollectionViewCell {
   private func setupTagContainer() -> SessionDetailsTagContainerView {
     let tagContainer = SessionDetailsTagContainerView()
     tagContainer.translatesAutoresizingMaskIntoConstraints = false
+    tagContainer.preferredMaxLayoutWidth = contentView.frame.size.width - 32
     return tagContainer
   }
 
@@ -166,7 +170,7 @@ class SessionDetailsCollectionViewMainInfoCell: MDCCollectionViewCell {
       "rateButton": rateButton,
       "stackContainer": stackContainer,
       "reserveButton": reserveButton
-      ] as [String : Any]
+      ] as [String: Any]
 
     let metrics = [
       "topMargin": 20,
@@ -273,10 +277,9 @@ class SessionDetailsCollectionViewMainInfoCell: MDCCollectionViewCell {
         reserveButton.setTitleColor(eventViewModel.reserveButtonFontColor, for: .normal)
 
         if processing {
-          reserveButton.setTitle("Processing, please wait", for: .normal)
+          reserveButton.setTitle(Constants.processingText, for: .normal)
           reserveButton.isUserInteractionEnabled = false
-        }
-        else {
+        } else {
           reserveButton.setTitle(eventViewModel.reserveButtonLabel, for: .normal)
           reserveButton.isUserInteractionEnabled = true
         }

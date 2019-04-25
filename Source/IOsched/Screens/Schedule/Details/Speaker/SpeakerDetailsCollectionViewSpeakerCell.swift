@@ -14,9 +14,7 @@
 //  limitations under the License.
 //
 
-import Foundation
 import MaterialComponents
-import AlamofireImage
 
 class SpeakerDetailsCollectionViewSpeakerCell: SessionDetailsCollectionViewSpeakerCell {
 
@@ -50,7 +48,8 @@ class SpeakerDetailsCollectionViewSpeakerCell: SessionDetailsCollectionViewSpeak
   override func setupCompanyLabel() -> UILabel {
     let label = UILabel()
     label.translatesAutoresizingMaskIntoConstraints = false
-    label.font = MDCTypography.captionFont()
+    label.font = UIFont.mdc_preferredFont(forMaterialTextStyle: .caption)
+    label.enableAdjustFontForContentSizeCategory()
     label.textColor = UIColor(hex: LayoutConstants.labelColor)
     label.numberOfLines = 0
     return label

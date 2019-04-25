@@ -15,7 +15,6 @@
 //
 
 import MaterialComponents
-import Platform
 
 protocol SessionFeedbackRatingDelegate: NSObjectProtocol {
 
@@ -25,7 +24,7 @@ protocol SessionFeedbackRatingDelegate: NSObjectProtocol {
 
 }
 
-class SessionFeedbackCollectionViewCell: MDCCollectionViewCell {
+class SessionFeedbackCollectionViewCell: UICollectionViewCell {
 
   private enum Constants {
     static let padding: CGFloat = 16
@@ -52,6 +51,10 @@ class SessionFeedbackCollectionViewCell: MDCCollectionViewCell {
     setupTitleLabel()
     setupRatingView()
     setupConstraints()
+
+    contentView.layer.cornerRadius = 8
+    contentView.layer.borderColor = UIColor(hex: 0xdadce0).cgColor
+    contentView.layer.borderWidth = 1
   }
 
   func setupTitleLabel() {
@@ -59,6 +62,7 @@ class SessionFeedbackCollectionViewCell: MDCCollectionViewCell {
     titleLabel.numberOfLines = 0
     titleLabel.lineBreakMode = .byWordWrapping
     titleLabel.font = Constants.bodyFont
+    titleLabel.enableAdjustFontForContentSizeCategory()
     titleLabel.textColor = Constants.contentTextColor
   }
 
@@ -146,9 +150,9 @@ class SessionFeedbackCollectionViewCell: MDCCollectionViewCell {
     let titleHeight = title.boundingRect(with: CGSize(width: maxWidth - 2 * Constants.padding,
                                                       height: .greatestFiniteMagnitude),
                                          options: [.usesLineFragmentOrigin],
-                                         attributes: [NSAttributedStringKey.font: Constants.bodyFont],
+                                         attributes: [NSAttributedString.Key.font: Constants.bodyFont],
                                          context: nil).height
-    return titleHeight + Constants.padding * 3 + /* rating view height */ 50
+    return titleHeight + Constants.padding * 3 + RatingView.viewHeight
   }
 
   @available(*, unavailable)
@@ -158,7 +162,6 @@ class SessionFeedbackCollectionViewCell: MDCCollectionViewCell {
 
 }
 
-// TODO(morganchen): Add support for dynamic type
 class FeedbackHeader: UICollectionReusableView {
 
   private enum Constants {
@@ -170,7 +173,8 @@ class FeedbackHeader: UICollectionReusableView {
     static let submittedFont = UIFont.preferredFont(forTextStyle: .callout)
     static let submittedBackgroundColor = UIColor(red: 28 / 255, green: 232 / 255, blue: 181 / 255, alpha: 1)
 
-    static let submittedText = NSLocalizedString("You've already submitted feedback for this session.", comment: "Describing a session the user has already reviewed")
+    static let submittedText = NSLocalizedString("You've already submitted feedback for this session.",
+                                                 comment: "Describing a session the user has already reviewed")
   }
 
   static let identifier = "FeedbackHeader"
@@ -208,6 +212,7 @@ class FeedbackHeader: UICollectionReusableView {
     label.translatesAutoresizingMaskIntoConstraints = false
     label.numberOfLines = 0
     label.textColor = Constants.textColor
+    label.enableAdjustFontForContentSizeCategory()
     label.font = Constants.font
   }
 
@@ -229,7 +234,7 @@ class FeedbackHeader: UICollectionReusableView {
                                           toItem: self,
                                           attribute: .left,
                                           multiplier: 1,
-                                          constant: Constants.padding))
+                                          constant: 0))
     // label right
     constraints.append(NSLayoutConstraint(item: label,
                                           attribute: .right,
@@ -237,7 +242,7 @@ class FeedbackHeader: UICollectionReusableView {
                                           toItem: self,
                                           attribute: .right,
                                           multiplier: 1,
-                                          constant: -Constants.padding))
+                                          constant: 0))
     // submitted container view top
     constraints.append(NSLayoutConstraint(item: submittedLabelContainer,
                                           attribute: .top,
@@ -320,18 +325,18 @@ class FeedbackHeader: UICollectionReusableView {
     let textHeight = text.boundingRect(with: CGSize(width: maxWidth - Constants.padding * 2,
                                                     height: .greatestFiniteMagnitude),
                                        options: [.usesLineFragmentOrigin],
-                                       attributes: [NSAttributedStringKey.font: Constants.submittedFont],
+                                       attributes: [NSAttributedString.Key.font: Constants.submittedFont],
                                        context: nil).size.height
     return textHeight + 2 * Constants.padding
   }
 
   private func setupSubmittedLabelContainer() {
     submittedLabelContainer.translatesAutoresizingMaskIntoConstraints = false
-    submittedLabelContainer.backgroundColor = Constants.submittedBackgroundColor
   }
 
   private func setupSubmittedLabel() {
     submittedLabel.translatesAutoresizingMaskIntoConstraints = false
+    submittedLabel.enableAdjustFontForContentSizeCategory()
     submittedLabel.font = Constants.submittedFont
     submittedLabel.textColor = Constants.textColor
     submittedLabel.numberOfLines = 0
@@ -348,8 +353,8 @@ class FeedbackHeader: UICollectionReusableView {
     let submittedHeight = submittedFeedback ? submittedLabelHeight(maxWidth: maxWidth) : 0
     let textHeight = title.boundingRect(with: CGSize(width: maxWidth - Constants.padding * 2,
                                                      height: .greatestFiniteMagnitude),
-                                        options: [.usesLineFragmentOrigin],
-                                        attributes: [NSAttributedStringKey.font: Constants.font],
+                                        options: [.usesLineFragmentOrigin, .usesDeviceMetrics, .usesFontLeading],
+                                        attributes: [NSAttributedString.Key.font: Constants.font],
                                         context: nil).size.height
     return textHeight + 2 * Constants.padding + submittedHeight
   }

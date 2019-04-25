@@ -16,11 +16,8 @@
 
 import Lottie
 import UIKit
-import Platform
 
 class CountdownView: UIView {
-
-  private lazy var rabbitHoleImageView: UIImageView = self.setupRabbitHoleImageView()
 
   @available(*, unavailable)
   required init(coder: NSCoder) {
@@ -39,54 +36,40 @@ class CountdownView: UIView {
     addSubview(daysOnesDigit)
     addSubview(daysTensDigit)
 
-    addSubview(secondsOnesDigitBackground)
-    addSubview(secondsTensDigitBackground)
-    addSubview(minutesOnesDigitBackground)
-    addSubview(minutesTensDigitBackground)
-    addSubview(hoursOnesDigitBackground)
-    addSubview(hoursTensDigitBackground)
-    addSubview(daysOnesDigitBackground)
-    addSubview(daysTensDigitBackground)
-
     addSubview(secondsLabel)
     addSubview(minutesLabel)
     addSubview(hoursLabel)
     addSubview(daysLabel)
 
-    addSubview(rabbitHoleImageView)
-    rabbitHoleImageView.isHidden = true
-
     addConstraints(digitConstraints)
     addConstraints(labelConstraints)
-    addConstraints(imageViewConstraints)
+
+    isUserInteractionEnabled = true
+
+    setupInitialState()
+
+    setContentCompressionResistancePriority(.required, for: .vertical)
+    setContentCompressionResistancePriority(.required, for: .horizontal)
   }
 
   convenience override init(frame: CGRect) {
     self.init()
   }
 
-  override var intrinsicContentSize: CGSize {
-    return CGSize(width: 260, height: 240)
+  static var contentSize: CGSize {
+    if IODateComparer.currentDateRelativeToIO() != .before {
+      return .zero
+    } else {
+      return CGSize(width: 260, height: 240)
+    }
   }
 
-  lazy var targetDate: Date = {
-    let dateComponents = DateComponents(calendar: Calendar.current,
-                                        timeZone: TimeUtils.pacificTimeZone,
-                                        era: nil,
-                                        year: 2018,
-                                        month: 5,
-                                        day: 8,
-                                        hour: 10,
-                                        minute: 0,
-                                        second: 0,
-                                        nanosecond: 0,
-                                        weekday: nil,
-                                        weekdayOrdinal: nil,
-                                        quarter: nil,
-                                        weekOfMonth: nil,
-                                        weekOfYear: nil,
-                                        yearForWeekOfYear: nil)
-    return dateComponents.date!
+  override var intrinsicContentSize: CGSize {
+    return CountdownView.contentSize
+  }
+
+  private lazy var targetDate: Date = {
+    return IODateComparer.ioStartDate
   }()
 
   func timeLeftUntilTargetDate(from date: Date = Date()) -> TimeInterval {
@@ -94,39 +77,55 @@ class CountdownView: UIView {
     return difference > 0 ? difference : 0
   }
 
+  func setupInitialState() {
+    for view in allAnimationViews {
+      if let animationView = view as? AnimationView {
+        animationView.stop()
+      }
+    }
+    let timeRemaining = timeLeftUntilTargetDate()
+    setTimeRemaining(timeRemaining)
+
+    var progress = progressInterval(from: secondsOnes, to: 0)
+    secondsOnesDigit.currentProgress = progress.0
+    progress = progressInterval(from: secondsTens, to: 0)
+    secondsTensDigit.currentProgress = progress.0
+    progress = progressInterval(from: minutesOnes, to: 0)
+    minutesOnesDigit.currentProgress = progress.0
+    progress = progressInterval(from: minutesTens, to: 0)
+    minutesTensDigit.currentProgress = progress.0
+    progress = progressInterval(from: hoursOnes, to: 0)
+    hoursOnesDigit.currentProgress = progress.0
+    progress = progressInterval(from: hoursTens, to: 0)
+    hoursTensDigit.currentProgress = progress.0
+    progress = progressInterval(from: daysOnes, to: 0)
+    daysOnesDigit.currentProgress = progress.0
+    progress = progressInterval(from: daysTens, to: 0)
+    daysTensDigit.currentProgress = progress.0
+  }
+
   // MARK: - Number animation views
 
-  private func randomRabbitHoleImage() -> UIImage? {
-    let randomNumber = arc4random_uniform(20) + 1
-    let randomImageName = "tree\(randomNumber)"
-    return UIImage(named: randomImageName)
-  }
-
-  private func setupRabbitHoleImageView() -> UIImageView {
-    let imageView = UIImageView()
-    imageView.contentMode = .scaleAspectFit
-    imageView.translatesAutoresizingMaskIntoConstraints = false
-    imageView.image = randomRabbitHoleImage()
-    return imageView
-  }
-
-  private func animationView() -> LOTAnimationView {
-    let view = LOTAnimationView()
-    view.setAnimation(named: animationName(forDigit: 0))
+  private func animationView() -> AnimationView {
+    let view = AnimationView()
+    view.animation = nil
     view.translatesAutoresizingMaskIntoConstraints = false
     view.contentMode = .scaleAspectFit
+    view.animation = CountdownView.animation
+    view.loopMode = .playOnce
+    view.backgroundBehavior = .stop
     return view
   }
 
-  private func animationName(forDigit digit: Int) -> String {
-    switch digit {
-    case 0 ..< 10:
-      return String(describing: digit)
-
-    case _:
-      return animationName(forDigit: 0)
+  override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+    super.touchesEnded(touches, with: event)
+    // Multi-touch is not enabled by default, so touches should only have one object.
+    if let touch = touches.first, bounds.contains(touch.location(in: self)) {
+      viewTapped(self)
     }
   }
+
+  private static let animation = Animation.named("countdown9-0")
 
   private func newTimer() -> Timer {
     let timer = Timer.scheduledTimer(timeInterval: 1,
@@ -134,13 +133,18 @@ class CountdownView: UIView {
                                      selector: #selector(updateWithAnimations(_:)),
                                      userInfo: nil,
                                      repeats: true)
+    timer.tolerance = 0.1
     return timer
   }
 
   private var timer: Timer? {
-    willSet {
-      stop()
+    didSet {
+      oldValue?.invalidate()
     }
+  }
+
+  var paused: Bool {
+    return timer == nil
   }
 
   func play() {
@@ -148,21 +152,14 @@ class CountdownView: UIView {
   }
 
   func stop() {
-    timer?.invalidate()
+    timer = nil
   }
 
-  private func showRabbitHoleImageView() {
-    timer = nil
-
-    rabbitHoleImageView.alpha = 0
-    rabbitHoleImageView.isHidden = false
-    UIView.animate(withDuration: 0.5, animations: {
-      self.allAnimationViews.forEach { $0.alpha = 0 }
-    }) { _ in
-      self.allAnimationViews.forEach { $0.isHidden = true }
-      UIView.animate(withDuration: 0.5) {
-        self.rabbitHoleImageView.alpha = 1
-      }
+  @objc private func viewTapped(_ sender: Any) {
+    if paused {
+      play()
+    } else {
+      stop()
     }
   }
 
@@ -171,8 +168,18 @@ class CountdownView: UIView {
     setTimeRemaining(timeRemaining)
 
     if timeRemaining == 0 {
-      showRabbitHoleImageView()
+      collapse()
     }
+  }
+
+  private var isCollapsed: Bool = false
+
+  private func collapse() {
+    stop()
+    for view in subviews {
+      view.removeFromSuperview()
+    }
+    isCollapsed = true
   }
 
   private func setTimeRemaining(_ timeRemaining: TimeInterval) {
@@ -202,26 +209,36 @@ class CountdownView: UIView {
     self.daysTens = daysTens
   }
 
-  private func animateView(_ view: LOTAnimationView,
-                           backgroundView: LOTAnimationView,
+  private func progressInterval(from oldValue: Int, to newValue: Int) -> (CGFloat, CGFloat) {
+    let startingProgress = (CGFloat(10 - oldValue) / 10).truncatingRemainder(dividingBy: 1)
+    let endingProgress = CGFloat(10 - newValue) / 10
+    return (startingProgress, endingProgress)
+  }
+
+  private func animateView(_ view: AnimationView,
                            oldValue: Int,
                            newValue: Int) {
-    if newValue != oldValue {
-      backgroundView.setAnimation(named: animationName(forDigit: oldValue))
-      backgroundView.play(fromProgress: 0.5, toProgress: 1.0, withCompletion: nil)
-      // Start the new animation on the next-ish run loop iteration to prevent flickering.
-      DispatchQueue.main
-          .asyncAfter(deadline: .now() + 0.1) {
-            view.setAnimation(named: self.animationName(forDigit: newValue))
-            view.play(fromProgress: 0, toProgress: 0.5, withCompletion: nil)
+    if oldValue == newValue { return }
+    // Special case for animating from 0 -> 6 for seconds' tens place digit.
+    if oldValue == 0 && newValue != 9 {
+      let animateOutProgressInterval: (CGFloat, CGFloat) = (0, 0.05)
+      let animateInStart = CGFloat(10 - newValue) / 10 - 0.05
+      let animateInEnd = animateInStart + 0.05
+      view.play(fromProgress: animateOutProgressInterval.0,
+                toProgress: animateOutProgressInterval.1,
+                completion: nil)
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+        view.play(fromProgress: animateInStart, toProgress: animateInEnd, completion: nil)
       }
+    } else {
+      let progress = progressInterval(from: oldValue, to: newValue)
+      view.play(fromProgress: progress.0, toProgress: progress.1, completion: nil)
     }
   }
 
   private var secondsOnes: Int = 10 {
     didSet {
       animateView(secondsOnesDigit,
-                  backgroundView: secondsOnesDigitBackground,
                   oldValue: oldValue,
                   newValue: secondsOnes)
     }
@@ -229,7 +246,6 @@ class CountdownView: UIView {
   private var secondsTens: Int = 10 {
     didSet {
       animateView(secondsTensDigit,
-                  backgroundView: secondsTensDigitBackground,
                   oldValue: oldValue,
                   newValue: secondsTens)
     }
@@ -237,7 +253,6 @@ class CountdownView: UIView {
   private var minutesOnes: Int = 10 {
     didSet {
       animateView(minutesOnesDigit,
-                  backgroundView: minutesOnesDigitBackground,
                   oldValue: oldValue,
                   newValue: minutesOnes)
     }
@@ -245,7 +260,6 @@ class CountdownView: UIView {
   private var minutesTens: Int = 10 {
     didSet {
       animateView(minutesTensDigit,
-                  backgroundView: minutesTensDigitBackground,
                   oldValue: oldValue,
                   newValue: minutesTens)
     }
@@ -253,7 +267,6 @@ class CountdownView: UIView {
   private var hoursOnes: Int = 10 {
     didSet {
       animateView(hoursOnesDigit,
-                  backgroundView: hoursOnesDigitBackground,
                   oldValue: oldValue,
                   newValue: hoursOnes)
     }
@@ -261,7 +274,6 @@ class CountdownView: UIView {
   private var hoursTens: Int = 10 {
     didSet {
       animateView(hoursTensDigit,
-                  backgroundView: hoursTensDigitBackground,
                   oldValue: oldValue,
                   newValue: hoursTens)
     }
@@ -269,7 +281,6 @@ class CountdownView: UIView {
   private var daysOnes: Int = 10 {
     didSet {
       animateView(daysOnesDigit,
-                  backgroundView: daysOnesDigitBackground,
                   oldValue: oldValue,
                   newValue: daysOnes)
     }
@@ -277,39 +288,30 @@ class CountdownView: UIView {
   private var daysTens: Int = 10 {
     didSet {
       animateView(daysTensDigit,
-                  backgroundView: daysTensDigitBackground,
                   oldValue: oldValue,
                   newValue: daysTens)
     }
   }
 
   private lazy var secondsOnesDigit = animationView()
-  private lazy var secondsOnesDigitBackground = animationView()
   private lazy var secondsTensDigit = animationView()
-  private lazy var secondsTensDigitBackground = animationView()
   private lazy var minutesOnesDigit = animationView()
-  private lazy var minutesOnesDigitBackground = animationView()
   private lazy var minutesTensDigit = animationView()
-  private lazy var minutesTensDigitBackground = animationView()
   private lazy var hoursOnesDigit = animationView()
-  private lazy var hoursOnesDigitBackground = animationView()
   private lazy var hoursTensDigit = animationView()
-  private lazy var hoursTensDigitBackground = animationView()
   private lazy var daysOnesDigit = animationView()
-  private lazy var daysOnesDigitBackground = animationView()
   private lazy var daysTensDigit = animationView()
-  private lazy var daysTensDigitBackground = animationView()
 
   private lazy var allAnimationViews: [UIView] = {
     return [
-      secondsOnesDigit, secondsOnesDigitBackground,
-      secondsTensDigit, secondsTensDigitBackground,
-      minutesOnesDigit, minutesOnesDigitBackground,
-      minutesTensDigit, minutesTensDigitBackground,
-      hoursOnesDigit, hoursOnesDigitBackground,
-      hoursTensDigit, hoursTensDigitBackground,
-      daysOnesDigit, daysOnesDigitBackground,
-      daysTensDigit, daysTensDigitBackground,
+      secondsOnesDigit,
+      secondsTensDigit,
+      minutesOnesDigit,
+      minutesTensDigit,
+      hoursOnesDigit,
+      hoursTensDigit,
+      daysOnesDigit,
+      daysTensDigit,
       secondsLabel,
       minutesLabel,
       hoursLabel,
@@ -368,26 +370,6 @@ class CountdownView: UIView {
                          toItem: nil, attribute: .notAnAttribute,
                          multiplier: 1,
                          constant: 80),
-      NSLayoutConstraint(item: secondsOnesDigitBackground, attribute: .top,
-                         relatedBy: .equal,
-                         toItem: self, attribute: .centerY,
-                         multiplier: 1,
-                         constant: verticalSpacing),
-      NSLayoutConstraint(item: secondsOnesDigitBackground, attribute: .left,
-                         relatedBy: .equal,
-                         toItem: self, attribute: .centerX,
-                         multiplier: 1,
-                         constant: horizontalSpacing + 60),
-      NSLayoutConstraint(item: secondsOnesDigitBackground, attribute: .width,
-                         relatedBy: .equal,
-                         toItem: nil, attribute: .notAnAttribute,
-                         multiplier: 1,
-                         constant: 50),
-      NSLayoutConstraint(item: secondsOnesDigitBackground, attribute: .height,
-                         relatedBy: .equal,
-                         toItem: nil, attribute: .notAnAttribute,
-                         multiplier: 1,
-                         constant: 80),
 
       // seconds tens digit
       NSLayoutConstraint(item: secondsTensDigit, attribute: .top,
@@ -406,26 +388,6 @@ class CountdownView: UIView {
                          multiplier: 1,
                          constant: 50),
       NSLayoutConstraint(item: secondsTensDigit, attribute: .height,
-                         relatedBy: .equal,
-                         toItem: nil, attribute: .notAnAttribute,
-                         multiplier: 1,
-                         constant: 80),
-      NSLayoutConstraint(item: secondsTensDigitBackground, attribute: .top,
-                         relatedBy: .equal,
-                         toItem: self, attribute: .centerY,
-                         multiplier: 1,
-                         constant: verticalSpacing),
-      NSLayoutConstraint(item: secondsTensDigitBackground, attribute: .left,
-                         relatedBy: .equal,
-                         toItem: self, attribute: .centerX,
-                         multiplier: 1,
-                         constant: horizontalSpacing),
-      NSLayoutConstraint(item: secondsTensDigitBackground, attribute: .width,
-                         relatedBy: .equal,
-                         toItem: nil, attribute: .notAnAttribute,
-                         multiplier: 1,
-                         constant: 50),
-      NSLayoutConstraint(item: secondsTensDigitBackground, attribute: .height,
                          relatedBy: .equal,
                          toItem: nil, attribute: .notAnAttribute,
                          multiplier: 1,
@@ -452,26 +414,6 @@ class CountdownView: UIView {
                          toItem: nil, attribute: .notAnAttribute,
                          multiplier: 1,
                          constant: 80),
-      NSLayoutConstraint(item: minutesOnesDigitBackground, attribute: .top,
-                         relatedBy: .equal,
-                         toItem: self, attribute: .centerY,
-                         multiplier: 1,
-                         constant: verticalSpacing),
-      NSLayoutConstraint(item: minutesOnesDigitBackground, attribute: .right,
-                         relatedBy: .equal,
-                         toItem: self, attribute: .centerX,
-                         multiplier: 1,
-                         constant: -horizontalSpacing),
-      NSLayoutConstraint(item: minutesOnesDigitBackground, attribute: .width,
-                         relatedBy: .equal,
-                         toItem: nil, attribute: .notAnAttribute,
-                         multiplier: 1,
-                         constant: 50),
-      NSLayoutConstraint(item: minutesOnesDigitBackground, attribute: .height,
-                         relatedBy: .equal,
-                         toItem: nil, attribute: .notAnAttribute,
-                         multiplier: 1,
-                         constant: 80),
 
       // minutes tens digit
       NSLayoutConstraint(item: minutesTensDigit, attribute: .top,
@@ -490,26 +432,6 @@ class CountdownView: UIView {
                          multiplier: 1,
                          constant: 50),
       NSLayoutConstraint(item: minutesTensDigit, attribute: .height,
-                         relatedBy: .equal,
-                         toItem: nil, attribute: .notAnAttribute,
-                         multiplier: 1,
-                         constant: 80),
-      NSLayoutConstraint(item: minutesTensDigitBackground, attribute: .top,
-                         relatedBy: .equal,
-                         toItem: self, attribute: .centerY,
-                         multiplier: 1,
-                         constant: verticalSpacing),
-      NSLayoutConstraint(item: minutesTensDigitBackground, attribute: .right,
-                         relatedBy: .equal,
-                         toItem: self, attribute: .centerX,
-                         multiplier: 1,
-                         constant: -horizontalSpacing - 60),
-      NSLayoutConstraint(item: minutesTensDigitBackground, attribute: .width,
-                         relatedBy: .equal,
-                         toItem: nil, attribute: .notAnAttribute,
-                         multiplier: 1,
-                         constant: 50),
-      NSLayoutConstraint(item: minutesTensDigitBackground, attribute: .height,
                          relatedBy: .equal,
                          toItem: nil, attribute: .notAnAttribute,
                          multiplier: 1,
@@ -536,26 +458,6 @@ class CountdownView: UIView {
                          toItem: nil, attribute: .notAnAttribute,
                          multiplier: 1,
                          constant: 80),
-      NSLayoutConstraint(item: hoursOnesDigitBackground, attribute: .bottom,
-                         relatedBy: .equal,
-                         toItem: self, attribute: .centerY,
-                         multiplier: 1,
-                         constant: -verticalSpacing),
-      NSLayoutConstraint(item: hoursOnesDigitBackground, attribute: .left,
-                         relatedBy: .equal,
-                         toItem: self, attribute: .centerX,
-                         multiplier: 1,
-                         constant: horizontalSpacing + 60),
-      NSLayoutConstraint(item: hoursOnesDigitBackground, attribute: .width,
-                         relatedBy: .equal,
-                         toItem: nil, attribute: .notAnAttribute,
-                         multiplier: 1,
-                         constant: 50),
-      NSLayoutConstraint(item: hoursOnesDigitBackground, attribute: .height,
-                         relatedBy: .equal,
-                         toItem: nil, attribute: .notAnAttribute,
-                         multiplier: 1,
-                         constant: 80),
 
       // hours tens digit
       NSLayoutConstraint(item: hoursTensDigit, attribute: .bottom,
@@ -574,26 +476,6 @@ class CountdownView: UIView {
                          multiplier: 1,
                          constant: 50),
       NSLayoutConstraint(item: hoursTensDigit, attribute: .height,
-                         relatedBy: .equal,
-                         toItem: nil, attribute: .notAnAttribute,
-                         multiplier: 1,
-                         constant: 80),
-      NSLayoutConstraint(item: hoursTensDigitBackground, attribute: .bottom,
-                         relatedBy: .equal,
-                         toItem: self, attribute: .centerY,
-                         multiplier: 1,
-                         constant: -verticalSpacing),
-      NSLayoutConstraint(item: hoursTensDigitBackground, attribute: .left,
-                         relatedBy: .equal,
-                         toItem: self, attribute: .centerX,
-                         multiplier: 1,
-                         constant: horizontalSpacing),
-      NSLayoutConstraint(item: hoursTensDigitBackground, attribute: .width,
-                         relatedBy: .equal,
-                         toItem: nil, attribute: .notAnAttribute,
-                         multiplier: 1,
-                         constant: 50),
-      NSLayoutConstraint(item: hoursTensDigitBackground, attribute: .height,
                          relatedBy: .equal,
                          toItem: nil, attribute: .notAnAttribute,
                          multiplier: 1,
@@ -620,26 +502,6 @@ class CountdownView: UIView {
                          toItem: nil, attribute: .notAnAttribute,
                          multiplier: 1,
                          constant: 80),
-      NSLayoutConstraint(item: daysOnesDigitBackground, attribute: .bottom,
-                         relatedBy: .equal,
-                         toItem: self, attribute: .centerY,
-                         multiplier: 1,
-                         constant: -verticalSpacing),
-      NSLayoutConstraint(item: daysOnesDigitBackground, attribute: .right,
-                         relatedBy: .equal,
-                         toItem: self, attribute: .centerX,
-                         multiplier: 1,
-                         constant: -horizontalSpacing),
-      NSLayoutConstraint(item: daysOnesDigitBackground, attribute: .width,
-                         relatedBy: .equal,
-                         toItem: nil, attribute: .notAnAttribute,
-                         multiplier: 1,
-                         constant: 50),
-      NSLayoutConstraint(item: daysOnesDigitBackground, attribute: .height,
-                         relatedBy: .equal,
-                         toItem: nil, attribute: .notAnAttribute,
-                         multiplier: 1,
-                         constant: 80),
 
       // days tens digit
       NSLayoutConstraint(item: daysTensDigit, attribute: .bottom,
@@ -661,27 +523,7 @@ class CountdownView: UIView {
                          relatedBy: .equal,
                          toItem: nil, attribute: .notAnAttribute,
                          multiplier: 1,
-                         constant: 80),
-      NSLayoutConstraint(item: daysTensDigitBackground, attribute: .bottom,
-                         relatedBy: .equal,
-                         toItem: self, attribute: .centerY,
-                         multiplier: 1,
-                         constant: -verticalSpacing),
-      NSLayoutConstraint(item: daysTensDigitBackground, attribute: .right,
-                         relatedBy: .equal,
-                         toItem: self, attribute: .centerX,
-                         multiplier: 1,
-                         constant: -horizontalSpacing - 60),
-      NSLayoutConstraint(item: daysTensDigitBackground, attribute: .width,
-                         relatedBy: .equal,
-                         toItem: nil, attribute: .notAnAttribute,
-                         multiplier: 1,
-                         constant: 50),
-      NSLayoutConstraint(item: daysTensDigitBackground, attribute: .height,
-                         relatedBy: .equal,
-                         toItem: nil, attribute: .notAnAttribute,
-                         multiplier: 1,
-                         constant: 80),
+                         constant: 80)
     ]
   }
 
@@ -733,32 +575,7 @@ class CountdownView: UIView {
                          relatedBy: .equal,
                          toItem: daysTensDigit, attribute: .bottom,
                          multiplier: 1,
-                         constant: 2),
-    ]
-  }
-
-  private var imageViewConstraints: [NSLayoutConstraint] {
-    return [
-      NSLayoutConstraint(item: rabbitHoleImageView, attribute: .centerX,
-                         relatedBy: .equal,
-                         toItem: self, attribute: .centerX,
-                         multiplier: 1,
-                         constant: 0),
-      NSLayoutConstraint(item: rabbitHoleImageView, attribute: .centerY,
-                         relatedBy: .equal,
-                         toItem: self, attribute: .centerY,
-                         multiplier: 1,
-                         constant: 0),
-      NSLayoutConstraint(item: rabbitHoleImageView, attribute: .width,
-                         relatedBy: .equal,
-                         toItem: nil, attribute: .notAnAttribute,
-                         multiplier: 1,
-                         constant: 260),
-      NSLayoutConstraint(item: rabbitHoleImageView, attribute: .height,
-                         relatedBy: .equal,
-                         toItem: nil, attribute: .notAnAttribute,
-                         multiplier: 1,
-                         constant: 240),
+                         constant: 2)
     ]
   }
 
@@ -781,47 +598,28 @@ class CountdownView: UIView {
 
   override var accessibilityLabel: String? {
     get {
-      if !rabbitHoleImageView.isHidden {
-        return NSLocalizedString("Rabbit hole URL. Double-tap to see where it goes.",
-                                 comment: "Localized accessibility label for rabbit hole puzzle")
-      } else {
-        return NSLocalizedString("I/O 2018 countdown.",
-                                 comment: "Localized accessibility label for the I/O countdown animation")
-      }
+      return NSLocalizedString("I/O 2019 countdown.",
+                               comment: "Localized accessibility label for the I/O countdown animation")
     } set {}
   }
 
   override var accessibilityValue: String? {
     get {
-      if rabbitHoleImageView.isHidden {
-        let timeInterval = timeLeftUntilTargetDate()
-        let timeRemainingString =
-            CountdownView.dateComponentsFormatter.string(from: timeInterval)
-        return timeRemainingString
-      } else {
-        return nil
-      }
+      let timeInterval = timeLeftUntilTargetDate()
+      let timeRemainingString =
+          CountdownView.dateComponentsFormatter.string(from: timeInterval)
+      return timeRemainingString
     } set {}
   }
 
   override var accessibilityTraits: UIAccessibilityTraits {
     get {
-      if rabbitHoleImageView.isHidden {
-        return UIAccessibilityTraitUpdatesFrequently
-      } else {
-        return UIAccessibilityTraitLink
-      }
+      return UIAccessibilityTraits.updatesFrequently
     } set {}
   }
 
   override func accessibilityActivate() -> Bool {
-    if rabbitHoleImageView.isHidden {
-      return false
-    } else {
-      let url = URL(string: "https://www.find.foo/rtq3TnCh")!
-      UIApplication.shared.openURL(url)
-      return true
-    }
+    return false
   }
 
 }

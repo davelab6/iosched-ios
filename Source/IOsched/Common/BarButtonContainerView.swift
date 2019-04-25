@@ -28,9 +28,9 @@ class BarButtonContainerView: UIView {
     addSubview(view)
 
     NSLayoutConstraint.activate([
-      view.centerXAnchor.constraint(equalTo: self.centerXAnchor),
-      view.centerYAnchor.constraint(equalTo: self.centerYAnchor),
-      ])
+      view.centerXAnchor.constraint(equalTo: centerXAnchor),
+      view.centerYAnchor.constraint(equalTo: centerYAnchor)
+    ])
   }
 
   required init?(coder aDecoder: NSCoder) {

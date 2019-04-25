@@ -15,7 +15,6 @@
 //
 
 import Foundation
-import Domain
 import GoogleSignIn
 import GTMSessionFetcher
 
@@ -24,10 +23,10 @@ import FirebaseAuth
 
 /// Fetches bookmarks from Firestore, but does not keep them synchronized.
 /// Call the `sync` method to synchronize bookmarks.
-class RemoteBookmarkDataSource {
+public class RemoteBookmarkDataSource {
 
   private let firestore: Firestore
-  private let auth: Auth
+  private let signIn: SignInInterface
 
   private var listener: ListenerRegistration? {
     willSet {
@@ -37,37 +36,42 @@ class RemoteBookmarkDataSource {
 
   private(set) var bookmarks: [String: BookmarkedSession] = [:]
 
-  init(firestore: Firestore = Firestore.firestore(), auth: Auth = Auth.auth()) {
+  public init(firestore: Firestore = Firestore.firestore(),
+              signIn: SignInInterface = SignIn.sharedInstance) {
     self.firestore = firestore
-    self.auth = auth
+    self.signIn = signIn
+
+    observeSignInUpdates()
   }
 
   deinit {
     listener = nil
+    stopObservingSignInUpdates()
+    stopSyncingBookmarks()
   }
 
   // MARK: - BookmarkDataSource
 
-  func addBookmark(for sessionId: String) {
-    setBookmarked(sessionId: sessionId, bookmarked: true)
+  public func addBookmark(for sessionID: String) {
+    setBookmarked(sessionID: sessionID, bookmarked: true)
   }
 
-  func removeBookmark(for sessionId: String) {
-    setBookmarked(sessionId: sessionId, bookmarked: false)
+  public func removeBookmark(for sessionID: String) {
+    setBookmarked(sessionID: sessionID, bookmarked: false)
   }
 
-  func setBookmarked(sessionId: String, bookmarked: Bool) {
-    guard let user = auth.currentUser else { return }
+  public func setBookmarked(sessionID: String, bookmarked: Bool) {
+    guard let user = signIn.currentUpgradableUser else { return }
 
     // It's ok for this to be out-of-sync with Firestore; fetched updates from
     // Firestore overwrite locally cached changes.
-    let bookmark = BookmarkedSession(id: sessionId, bookmarked: bookmarked)
-    self.bookmarks[sessionId] = bookmark
+    let bookmark = BookmarkedSession(id: sessionID, bookmarked: bookmarked)
+    self.bookmarks[sessionID] = bookmark
 
-    let userEvent = firestore.userEvent(for: user, withSessionID: sessionId)
+    let userEvent = firestore.userEvent(for: user, withSessionID: sessionID)
 
     userEvent.setData([
-      "eventId": sessionId,
+      "eventId": sessionID,
       "isStarred": bookmarked
     ], merge: true) { error in
       if let error = error {
@@ -76,17 +80,34 @@ class RemoteBookmarkDataSource {
     }
   }
 
-  func isBookmarked(sessionId: String) -> Bool {
-    return bookmarks[sessionId]?.bookmarked ?? false
+  public func toggleBookmark(sessionID: String) {
+    if isBookmarked(sessionID: sessionID) {
+      removeBookmark(for: sessionID)
+    } else {
+      addBookmark(for: sessionID)
+    }
   }
 
-  func retrieveBookmarks(_ callback: @escaping (_ bookmarks: [BookmarkedSession]) -> Void) {
-    guard let user = auth.currentUser else { return }
+  public func isBookmarked(sessionID: String) -> Bool {
+    return bookmarks[sessionID]?.bookmarked ?? false
+  }
+
+  /// Used to keep track of an active listener when auth status changes.
+  private var syncCallback: (([BookmarkedSession]) -> Void)?
+
+  public func syncBookmarks(_ callback: @escaping (_ bookmarks: [BookmarkedSession]) -> Void) {
+    syncCallback = callback
+    guard let user = signIn.currentUpgradableUser else { return }
 
     let bookmarksQuery = firestore.userEvents(for: user).whereField("isStarred", isEqualTo: true)
     listener = bookmarksQuery.addSnapshotListener { [weak self] (querySnapshot, error) in
-      guard let snapshot = querySnapshot else {
-        print("Error fetching bookmarks: \(error!)")
+      defer {
+        NotificationCenter.default.post(name: .bookmarkUpdate, object: nil)
+      }
+      guard let self = self, let snapshot = querySnapshot else {
+        if let error = error {
+          print("Error fetching bookmarks: \(error)")
+        }
         callback([])
         return
       }
@@ -99,32 +120,72 @@ class RemoteBookmarkDataSource {
       .filter({ $0 != nil })
       .map({ $0! })
 
+      self.bookmarks.removeAll()
       for bookmark in bookmarks {
-        self?.bookmarks[bookmark.id] = bookmark
+        self.bookmarks[bookmark.id] = bookmark
       }
       callback(bookmarks)
     }
   }
 
-  // MARK: Remote updates
+  public func stopSyncingBookmarks() {
+    listener = nil
+    syncCallback = nil
+    self.bookmarks.removeAll()
+  }
 
-  func sync(_ completion: @escaping () -> Void = { }) {
-    retrieveBookmarks { _ in
-      completion()
+  // MARK: - SignIn listeners
+
+  private var authChangeHandle: Any?
+  private var signInHandle: Any?
+  private var signOutHandle: Any?
+
+  private func onSignIn() {
+    guard let callback = syncCallback else { return }
+    self.syncBookmarks(callback)
+  }
+
+  private func onSignOut() {
+    self.listener = nil
+    self.bookmarks = [:]
+    self.syncCallback?([])
+  }
+
+  private func observeSignInUpdates() {
+    authChangeHandle = signIn.addAnonymousAuthStateHandler { [weak self] user in
+      guard let self = self else { return }
+      if user != nil {
+        self.onSignIn()
+      } else {
+        self.onSignOut()
+      }
+    }
+    signInHandle = signIn.addGoogleSignInHandler(self) { [weak self] in
+      guard let self = self else { return }
+      self.onSignIn()
+    }
+    signOutHandle = signIn.addGoogleSignOutHandler(self) { [weak self] in
+      guard let self = self else { return }
+      self.onSignOut()
+    }
+  }
+
+  private func stopObservingSignInUpdates() {
+    if let handle = authChangeHandle {
+      signIn.removeAnonymousAuthStateHandler(handle)
+    }
+    if let handle = signInHandle {
+      signIn.removeGoogleSignInHandler(handle)
+    }
+    if let handle = signOutHandle {
+      signIn.removeGoogleSignOutHandler(handle)
     }
   }
 
 }
 
-// MARK: - BatchUpdatingBookmarkDataSource
+extension NSNotification.Name {
 
-extension RemoteBookmarkDataSource: BatchUpdatingBookmarkDataSource {
+  static let bookmarkUpdate = NSNotification.Name("com.google.iosched.bookmarkUpdate")
 
-  func saveBookmarks(bookmarks: [BookmarkedSession]) {
-
-  }
-
-  func saveBookmark(bookmark: BookmarkedSession) {
-
-  }
 }

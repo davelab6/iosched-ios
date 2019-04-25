@@ -1,5 +1,5 @@
 //
-//  Copyright (c) 2017 Google Inc.
+//  Copyright (c) 2019 Google Inc.
 //
 //  Licensed under the Apache License, Version 2.0 (the "License");
 //  you may not use this file except in compliance with the License.
@@ -14,9 +14,11 @@
 //  limitations under the License.
 //
 
-// Note: This file was originally taken from a different project and modified by
-// Google. The original license is displayed below.
+// This file was derived from code by Norman Basham and includes modifications
+// made by Google employees. The original copyright and license are included
+// below.
 
+// swiftlint:disable all
 //
 //  Color+HexAndCSSColorNames.swift
 //
@@ -62,7 +64,7 @@ public extension UIColor {
    - **nil** [UIColor clearColor]
    - **empty string** [UIColor clearColor]
    */
-  public convenience init(hex: String?) {
+  convenience init(hex: String) {
     let normalizedHexString: String = UIColor.normalize(hex)
     var c: CUnsignedInt = 0
     Scanner(string: normalizedHexString).scanHexInt32(&c)
@@ -80,9 +82,9 @@ public extension UIColor {
 
    - Returns: A new string with `String` with the color's hexidecimal value.
    */
-  public func hexDescription(_ includeAlpha: Bool = false) -> String {
-    if self.cgColor.numberOfComponents == 4 {
-      let components = self.cgColor.components
+  func hexDescription(_ includeAlpha: Bool = false) -> String {
+    if cgColor.numberOfComponents == 4 {
+      let components = cgColor.components
       let red = Float((components?[0])!) * 255.0
       let green = Float((components?[1])!) * 255.0
       let blue = Float((components?[2])!) * 255.0
@@ -330,7 +332,7 @@ public extension UIColor {
   ]
 
   /// Returns nil for UIColors in non-SRGB color spaces.
-  public var luminance: CGFloat? {
+  var luminance: CGFloat? {
     guard let components = cgColor.components else { return nil }
     guard components.count >= 3 else { return nil }
     let componentsGrayscaleIntensity = components.map {
@@ -341,14 +343,18 @@ public extension UIColor {
         + componentsGrayscaleIntensity[2] * 0.0722
   }
 
-  public func contrast(to color: UIColor) -> CGFloat? {
+  func contrast(to color: UIColor) -> CGFloat? {
     guard let lhs = luminance, let rhs = color.luminance else { return nil }
     return lhs / rhs
   }
 
-  public var shouldDisplayDarkText: Bool {
+  var shouldDisplayDarkText: Bool {
+    // This uses init(hex:) instead of .white because the contrast
+    // calculation doesn't work unless the color is in the SRGB colorspace.
     let lightTextColor = UIColor(hex: "#FFFFFF")
     let absoluteContrast = lightTextColor.contrast(to: self) ?? 0
     return absoluteContrast < 4.5
   }
 }
+
+// swiftlint:enable all

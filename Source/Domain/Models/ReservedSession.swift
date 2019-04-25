@@ -16,29 +16,15 @@
 
 import Foundation
 
-//public enum ReservedSessionStatus: String {
-//  case reserved = "RESERVED"
-//  case waitlisted = "WAITLISTED"
-//  case deleted = "DELETED"
-//}
-
 public typealias ReservedSessionStatus = ReservationStatus
 
 public struct ReservedSession {
   public let id: String
   public let status: ReservedSessionStatus
-  public let timestamp: Int
 
-  public init(id: String, status: ReservedSessionStatus, timestamp: String) {
+  public init(id: String, status: ReservedSessionStatus) {
     self.id = id
     self.status = status
-    self.timestamp = Int(timestamp) ?? 0
-  }
-
-  public init(id: String, status: ReservedSessionStatus, timestamp: Int) {
-    self.id = id
-    self.status = status
-    self.timestamp = timestamp
   }
 
 }

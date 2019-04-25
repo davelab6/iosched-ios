@@ -14,11 +14,8 @@
 //  limitations under the License.
 //
 
-import Domain
 import MaterialComponents
-import Platform
 
-// TODO(morganchen): Add support for dynamic type accessibility
 class SessionFeedbackViewController: BaseCollectionViewController {
 
   let viewModel: SessionFeedbackViewModel
@@ -35,7 +32,7 @@ class SessionFeedbackViewController: BaseCollectionViewController {
 
   fileprivate var survey = FeedbackSurvey()
 
-  convenience init(sessionID: String, title: String, userState: WritableUserState) {
+  convenience init(sessionID: String, title: String, userState: PersistentUserState) {
     let viewModel = SessionFeedbackViewModel(sessionID: sessionID,
                                              title: title,
                                              userState: userState)
@@ -44,29 +41,34 @@ class SessionFeedbackViewController: BaseCollectionViewController {
 
   required init(viewModel: SessionFeedbackViewModel) {
     self.viewModel = viewModel
-    super.init(collectionViewLayout: MDCCollectionViewFlowLayout())
+    let layout = MDCCollectionViewFlowLayout()
+    layout.minimumLineSpacing = 8
+    super.init(collectionViewLayout: layout)
   }
 
   @objc override func setupViews() {
     super.setupViews()
-    collectionView?.register(SessionFeedbackCollectionViewCell.self,
-                             forCellWithReuseIdentifier: SessionFeedbackCollectionViewCell.reuseIdentifier())
-    collectionView?.register(FeedbackHeader.self,
-                             forSupplementaryViewOfKind: UICollectionElementKindSectionHeader,
-                             withReuseIdentifier: FeedbackHeader.identifier)
+    collectionView.backgroundColor = .white
+    collectionView.register(
+      SessionFeedbackCollectionViewCell.self,
+      forCellWithReuseIdentifier: SessionFeedbackCollectionViewCell.reuseIdentifier()
+    )
+    collectionView.register(FeedbackHeader.self,
+                            forSupplementaryViewOfKind: UICollectionView.elementKindSectionHeader,
+                            withReuseIdentifier: FeedbackHeader.identifier)
 
-    self.title = NSLocalizedString("Feedback", comment: "Feedback screen title")
+    self.title = NSLocalizedString("Rate Session", comment: "Rate Session screen title")
 
     navigationItem.leftBarButtonItem = cancelButton
     navigationItem.rightBarButtonItem = submitButton
     submitButton.isEnabled = false
   }
 
-  @objc override func setupAppBar() -> MDCAppBar {
+  @objc override func setupAppBar() -> MDCAppBarViewController {
     let bar = super.setupAppBar()
     let statusBarHeight = UIApplication.shared.statusBarFrame.height
-    bar.headerViewController.headerView.minimumHeight = statusBarHeight + 40
-    bar.headerViewController.headerView.maximumHeight = statusBarHeight + 60
+    bar.headerView.minimumHeight = statusBarHeight + 40
+    bar.headerView.maximumHeight = statusBarHeight + 60
     return bar
   }
 
@@ -132,12 +134,17 @@ extension SessionFeedbackViewController {
                                viewForSupplementaryElementOfKind kind: String,
                                at indexPath: IndexPath) -> UICollectionReusableView {
     // swiftlint:disable force_cast
-    let view = collectionView.dequeueReusableSupplementaryView(ofKind: UICollectionElementKindSectionHeader,
+    let view = collectionView.dequeueReusableSupplementaryView(ofKind: UICollectionView.elementKindSectionHeader,
                                                                withReuseIdentifier: FeedbackHeader.identifier,
                                                                for: indexPath) as! FeedbackHeader
     // swiftlint:enable force_cast
     view.populate(title: viewModel.sessionTitle, feedbackSubmitted: viewModel.didSubmitFeedback)
     return view
+  }
+
+  override func collectionView(_ collectionView: UICollectionView,
+                               shouldHideItemSeparatorAt indexPath: IndexPath) -> Bool {
+    return true
   }
 
 }
@@ -161,6 +168,12 @@ extension SessionFeedbackViewController {
                                        maxWidth: width,
                                        submittedFeedback: viewModel.didSubmitFeedback)
     return CGSize(width: width, height: height)
+  }
+
+  override func collectionView(_ collectionView: UICollectionView,
+                               layout collectionViewLayout: UICollectionViewLayout,
+                               insetForSectionAt section: Int) -> UIEdgeInsets {
+    return UIEdgeInsets(top: 0, left: 16, bottom: 0, right: 16)
   }
 
 }

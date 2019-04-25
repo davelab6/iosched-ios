@@ -17,6 +17,9 @@
 import UIKit
 import MaterialComponents
 
+/// Used by the base view controller to style itself and its
+/// subclasses.
+/// - SeeAlso: BaseCollectionViewController
 protocol ViewControllerStylable {
   var minHeaderHeight: CGFloat { get }
   var maxHeaderHeight: CGFloat { get }

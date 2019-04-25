@@ -18,7 +18,7 @@ import Foundation
 import Quick
 import Nimble
 
-@testable import Domain
+@testable import IOsched
 
 class SessionSpec: QuickSpec {
 
@@ -48,12 +48,9 @@ class SessionSpec: QuickSpec {
           detail: "Speechless is back at I/O for the third year in a row!",
           startTimestamp: startTime1,
           endTimestamp: endTime1,
-          isLivestream: false,
-          youtubeUrl: nil,
-          tagNames: ["TRACK_MISC", "TYPE_SESSIONS"],
-          mainTagId: "TRACK_MISC",
-          color: "#B5EBF7",
-          speakerIds: ["speaker-1", "speaker-2"],
+          youtubeURL: nil,
+          tags: [EventTag.sessions, EventTag.misc],
+          mainTopic: nil,
           roomId: "20d7a6c1-c208-e611-a517-00155d5066d7",
           roomName: "",
           speakers: [])
@@ -65,12 +62,9 @@ class SessionSpec: QuickSpec {
           detail: "Speechless is back at I/O for the third year in a row!",
           startTimestamp: startTime1,
           endTimestamp: endTime1,
-          isLivestream: false,
-          youtubeUrl: nil,
-          tagNames: ["TRACK_MISC", "TYPE_SESSIONS"],
-          mainTagId: "TRACK_MISC",
-          color: "#B5EBF7",
-          speakerIds: ["speaker-1", "speaker-2"],
+          youtubeURL: nil,
+          tags: [EventTag.sessions, EventTag.misc],
+          mainTopic: nil,
           roomId: "20d7a6c1-c208-e611-a517-00155d5066d7",
           roomName: "",
           speakers: [])
@@ -82,12 +76,9 @@ class SessionSpec: QuickSpec {
           detail: "Speechless is back at I/O for the third year in a row!",
           startTimestamp: startTime2,
           endTimestamp: endTime2,
-          isLivestream: false,
-          youtubeUrl: nil,
-          tagNames: ["TRACK_MISC", "TYPE_SESSIONS"],
-          mainTagId: "TRACK_MISC",
-          color: "#B5EBF7",
-          speakerIds: ["speaker-1", "speaker-2"],
+          youtubeURL: nil,
+          tags: [EventTag.sessions, EventTag.misc],
+          mainTopic: nil,
           roomId: "20d7a6c1-c208-e611-a517-00155d5066d7",
           roomName: "",
           speakers: [])

@@ -20,8 +20,8 @@ class ScheduleCollectionEmptyView: UIView {
 
   private lazy var textLabel: UILabel = self.setupTextLabel()
   private lazy var logoView: UIImageView = self.setupLogoView()
-  private var emptyMyIOText: String;
-  private var emptyFilterText: String;
+  private var emptyMyIOText: String
+  private var emptyFilterText: String
   private lazy var logo: UIImage = {
     return UIImage(named: "logo")!
   }()
@@ -35,7 +35,6 @@ class ScheduleCollectionEmptyView: UIView {
 
     addSubview(textLabel)
     addSubview(logoView)
-
 
     addConstraints(textLabelConstraints)
     addConstraints(logoViewConstraints)
@@ -61,6 +60,7 @@ class ScheduleCollectionEmptyView: UIView {
     label.translatesAutoresizingMaskIntoConstraints = false
     label.textColor = UIColor(hex: "#747474")
     label.font = UIFont.preferredFont(forTextStyle: .body)
+    label.enableAdjustFontForContentSizeCategory()
     label.text = emptyMyIOText
     label.numberOfLines = 0
     label.textAlignment = .center
@@ -93,7 +93,7 @@ class ScheduleCollectionEmptyView: UIView {
       NSLayoutConstraint(item: textLabel, attribute: .trailing,
                          relatedBy: .equal,
                          toItem: self, attribute: .trailing,
-                         multiplier: 1, constant: -8),
+                         multiplier: 1, constant: -8)
     ]
   }
 
@@ -114,7 +114,7 @@ class ScheduleCollectionEmptyView: UIView {
       NSLayoutConstraint(item: logoView, attribute: .height,
                          relatedBy: .equal,
                          toItem: nil, attribute: .notAnAttribute,
-                         multiplier: 1, constant: logo.size.height),
+                         multiplier: 1, constant: logo.size.height)
     ]
   }
 

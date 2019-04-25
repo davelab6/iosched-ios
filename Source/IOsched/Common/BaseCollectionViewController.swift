@@ -19,7 +19,7 @@ import MaterialComponents
 
 class BaseCollectionViewController: MDCCollectionViewController {
 
-  lazy var appBar: MDCAppBar = self.setupAppBar()
+  lazy var appBar: MDCAppBarViewController = self.setupAppBar()
 
   override func viewDidLoad() {
     super.viewDidLoad()
@@ -32,12 +32,12 @@ class BaseCollectionViewController: MDCCollectionViewController {
     Application.sharedInstance.analytics
       .setScreenName("\(type(of: self))", screenClass: "\(type(of: self))")
 
-    if UIAccessibilityIsVoiceOverRunning() {
+    if UIAccessibility.isVoiceOverRunning {
       // Brittle, but works around something else hijacking UIAccessibility focus
       // when the app is launched.
       DispatchQueue.main.async {
-        UIAccessibilityPostNotification(UIAccessibilityScreenChangedNotification,
-                                        self.titleLabel)
+        UIAccessibility.post(notification: UIAccessibility.Notification.screenChanged,
+                             argument: self.titleLabel)
       }
     }
     logPresentationEvent()
@@ -52,52 +52,55 @@ class BaseCollectionViewController: MDCCollectionViewController {
   }
 
   func setupViews() {
-    appBar.headerViewController.didMove(toParentViewController: self)
-    appBar.addSubviewsToParent()
+    addChild(appBar)
+    view.addSubview(appBar.view)
+    appBar.didMove(toParent: self)
 
     setupTracking()
   }
 
-  func setupAppBar() -> MDCAppBar {
-    let appBar = MDCAppBar()
-    self.addChildViewController(appBar.headerViewController)
+  func setupAppBar() -> MDCAppBarViewController {
+    let appBar = MDCAppBarViewController()
 
-    let headerView = appBar.headerViewController.headerView
+    let headerView = appBar.headerView
     headerView.backgroundColor = headerBackgroundColor
     headerView.minimumHeight = minHeaderHeight
     headerView.maximumHeight = maxHeaderHeight
 
     appBar.navigationBar.tintColor = headerForegroundColor
+    appBar.navigationBar.uppercasesButtonTitles = false
+    appBar.navigationBar.titleViewLayoutBehavior = .fill
 
-    var attributes: [NSAttributedStringKey: Any] =
-      [ NSAttributedStringKey.foregroundColor: headerForegroundColor]
+    var attributes: [NSAttributedString.Key: Any] =
+      [NSAttributedString.Key.foregroundColor: headerForegroundColor]
     let font = Constants.titleFont
     if let font = font {
-      attributes[NSAttributedStringKey.font] = font
+      attributes[NSAttributedString.Key.font] = font
     }
     appBar.navigationBar.titleTextAttributes = attributes
+    appBar.navigationBar.titleViewLayoutBehavior = .center
 
     return appBar
   }
 
   func setHeaderBackgroundColor(color: UIColor) {
-    let headerView = appBar.headerViewController.headerView
+    let headerView = appBar.headerView
     headerView.backgroundColor = color
   }
 
   func setHeaderForegroundColor(color: UIColor) {
     appBar.navigationBar.tintColor = color
 
-    var attributes: [NSAttributedStringKey: Any] = [ NSAttributedStringKey.foregroundColor: color]
+    var attributes: [NSAttributedString.Key: Any] = [ NSAttributedString.Key.foregroundColor: color]
     let font = Constants.titleFont
     if let font = font {
-      attributes[NSAttributedStringKey.font] = font
+      attributes[NSAttributedString.Key.font] = font
     }
     appBar.navigationBar.titleTextAttributes = attributes
   }
 
   func setupTracking() {
-    appBar.headerViewController.headerView.trackingScrollView = self.collectionView
+    appBar.headerView.trackingScrollView = collectionView
   }
 
   override func viewDidLayoutSubviews() {
@@ -127,9 +130,9 @@ class BaseCollectionViewController: MDCCollectionViewController {
   }
 
 // MARK: - UIGestureRecognizerDelegate
-// Enable swipe back gesture
+  // Enable swipe back gesture
   func enableSwipeBackGesture() {
-    self.navigationController?.interactivePopGestureRecognizer?.delegate = self
+    navigationController?.interactivePopGestureRecognizer?.delegate = self
   }
 
   override public func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
@@ -138,24 +141,17 @@ class BaseCollectionViewController: MDCCollectionViewController {
 
 // MARK: - ViewControllerStylable
   private enum StylingConstants {
-    static let minHeaderHeight: CGFloat = 105
-    static let maxHeaderHeightDiff: CGFloat = 55
+    static let minHeaderHeight: CGFloat = 104
     static let headerBackgroundColor = UIColor.white
-    static let headerForegroundColor = UIColor(hex: "#424242")
+    static let headerForegroundColor = UIColor(hex: "#202124")
   }
 
   var minHeaderHeight: CGFloat {
-    let height: CGFloat
-    if #available(iOS 11, *) {
-      height = tabBarController?.view.safeAreaInsets.top ?? 0
-    } else {
-      height = tabBarController?.topLayoutGuide.length ?? 0
-    }
-    return StylingConstants.minHeaderHeight + height
+    return UIApplication.shared.statusBarFrame.height + StylingConstants.minHeaderHeight
   }
 
   var maxHeaderHeight: CGFloat {
-    return minHeaderHeight + StylingConstants.maxHeaderHeightDiff
+    return minHeaderHeight
   }
 
   var headerBackgroundColor: UIColor {
@@ -167,7 +163,7 @@ class BaseCollectionViewController: MDCCollectionViewController {
   }
 
   var tabBarTintColor: UIColor? {
-    return MDCPalette.indigo.accent200
+    return UIColor(red: 26 / 255, green: 115 / 255, blue: 232 / 255, alpha: 1)
   }
 
   override var preferredStatusBarStyle: UIStatusBarStyle {
@@ -176,7 +172,6 @@ class BaseCollectionViewController: MDCCollectionViewController {
       : .default
   }
 
-  // TODO make this more generic, so it will work for animated headers as well
   var logoFileName: String? {
     return nil
   }
@@ -188,20 +183,20 @@ class BaseCollectionViewController: MDCCollectionViewController {
 // MARK: - UIScrollViewDelegate
 
   override func scrollViewDidScroll(_ scrollView: UIScrollView) {
-    if scrollView == self.appBar.headerViewController.headerView.trackingScrollView {
-      self.appBar.headerViewController.headerView.trackingScrollDidScroll()
+    if scrollView == appBar.headerView.trackingScrollView {
+      appBar.headerView.trackingScrollDidScroll()
     }
   }
 
   override func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
-    if scrollView == self.appBar.headerViewController.headerView.trackingScrollView {
-      self.appBar.headerViewController.headerView.trackingScrollDidEndDecelerating()
+    if scrollView == appBar.headerView.trackingScrollView {
+      appBar.headerView.trackingScrollDidEndDecelerating()
     }
   }
 
   override func scrollViewDidEndDragging(_ scrollView: UIScrollView,
                                          willDecelerate decelerate: Bool) {
-    let headerView = self.appBar.headerViewController.headerView
+    let headerView = appBar.headerView
     if scrollView == headerView.trackingScrollView {
       headerView.trackingScrollDidEndDraggingWillDecelerate(decelerate)
     }
@@ -210,7 +205,7 @@ class BaseCollectionViewController: MDCCollectionViewController {
   override func scrollViewWillEndDragging(_ scrollView: UIScrollView,
                                           withVelocity velocity: CGPoint,
                                           targetContentOffset: UnsafeMutablePointer<CGPoint>) {
-    let headerView = self.appBar.headerViewController.headerView
+    let headerView = appBar.headerView
     if scrollView == headerView.trackingScrollView {
       headerView.trackingScrollWillEndDragging(withVelocity: velocity,
                                                targetContentOffset: targetContentOffset)

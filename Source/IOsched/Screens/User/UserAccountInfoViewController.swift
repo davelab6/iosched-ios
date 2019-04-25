@@ -18,16 +18,14 @@ import Foundation
 import UIKit
 import MaterialComponents
 import AlamofireImage
-import DTCoreText
-import GoogleSignIn
 
-class UserAccountInfoViewController: UIViewController {
+class UserAccountInfoViewController: UIViewController, UIScrollViewDelegate {
 
-  var viewModel: UserAccountInfoViewModel?
+  let viewModel: UserAccountInfoViewModel
 
   private enum ColorConstants {
-    static let email = UIColor(hex: "#787878").withAlphaComponent(0.7)
-    static let name = UIColor(hex: "#747474").withAlphaComponent(0.7)
+    static let email = UIColor(red: 95 / 255, green: 99 / 255, blue: 104 / 255, alpha: 1)
+    static let name = UIColor(red: 60 / 255, green: 64 / 255, blue: 67 / 255, alpha: 1)
     static let actionButton = UIColor(hex: "4668fd")
   }
 
@@ -39,8 +37,8 @@ class UserAccountInfoViewController: UIViewController {
 
   private lazy var actionButton: MDCButton = self.setupActionButton()
   private lazy var emailLabel: UILabel = self.setupEmailLabel()
-  private lazy var navBar: MDCNavigationBar = self.setupNavBar()
   private lazy var messageLabel: UILabel = self.setupMessageLabel()
+  private lazy var manageAccountView = self.setupManageAccountView()
   private lazy var nameLabel: UILabel = self.setupNameLabel()
   private lazy var thumbnailImageView: UIImageView = self.setupThumbnailImageView()
   private lazy var scrollView: UIScrollView = self.setupScrollView()
@@ -74,15 +72,37 @@ class UserAccountInfoViewController: UIViewController {
 
   override func viewDidLoad() {
     super.viewDidLoad()
+    addChild(appBar)
+    view.addSubview(appBar.view)
+    appBar.didMove(toParent: self)
+    appBar.headerView.trackingScrollView = scrollView
+    scrollView.delegate = self
+    title = NSLocalizedString("Settings", comment: "Title of the Settings screen.")
+
+    navigationItem.rightBarButtonItem = signOutButton
     setupViews()
+
+    view.sendSubviewToBack(scrollView)
+  }
+
+  override func viewWillAppear(_ animated: Bool) {
+    super.viewWillAppear(animated)
     updateFromViewModel()
-    view.setNeedsLayout()
+    viewModel.signInStateChangeCallback = { [unowned self] _ in
+      self.updateFromViewModel()
+    }
+  }
+
+  override func viewWillDisappear(_ animated: Bool) {
+    super.viewWillDisappear(animated)
+    viewModel.signInStateChangeCallback = nil
   }
 
   private func setupNameLabel() -> UILabel {
     let label = UILabel()
     label.translatesAutoresizingMaskIntoConstraints = false
-    label.font = MDCTypography.titleFont()
+    label.font = UIFont.mdc_preferredFont(forMaterialTextStyle: .title)
+    label.enableAdjustFontForContentSizeCategory()
     label.textColor = ColorConstants.name
     label.numberOfLines = 0
     return label
@@ -91,7 +111,8 @@ class UserAccountInfoViewController: UIViewController {
   private func setupEmailLabel() -> UILabel {
     let label = UILabel()
     label.translatesAutoresizingMaskIntoConstraints = false
-    label.font = MDCTypography.subheadFont()
+    label.font = UIFont.mdc_preferredFont(forMaterialTextStyle: .subheadline)
+    label.enableAdjustFontForContentSizeCategory()
     label.textColor = ColorConstants.email
     label.numberOfLines = 0
     return label
@@ -109,21 +130,28 @@ class UserAccountInfoViewController: UIViewController {
   private func setupMessageLabel() -> UILabel {
     let label = UILabel()
     label.translatesAutoresizingMaskIntoConstraints = false
-    label.font = MDCTypography.body1Font()
+    label.font = UIFont.mdc_preferredFont(forMaterialTextStyle: .body1)
+    label.enableAdjustFontForContentSizeCategory()
     label.numberOfLines = 0
     label.textAlignment = .center
     return label
   }
 
+  private func setupManageAccountView() -> ManageYourGoogleAccountButtonContainer {
+    let view = ManageYourGoogleAccountButtonContainer()
+    view.translatesAutoresizingMaskIntoConstraints = false
+    return view
+  }
+
   private func setupSettingsView() -> UserAccountSettingsView {
     let view = UserAccountSettingsView(settingsViewModel)
-    view.translatesAutoresizingMaskIntoConstraints = false;
+    view.translatesAutoresizingMaskIntoConstraints = false
     return view
   }
 
   private func setupBuiltWithView() -> UserAccountSettingsBuiltWithView {
     let view = UserAccountSettingsBuiltWithView()
-    view.translatesAutoresizingMaskIntoConstraints = false;
+    view.translatesAutoresizingMaskIntoConstraints = false
     view.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(handleMDCTap)))
     return view
   }
@@ -135,17 +163,30 @@ class UserAccountInfoViewController: UIViewController {
     return view
   }
 
-  private func setupNavBar() -> MDCNavigationBar {
-    let navBar = MDCNavigationBar()
-    navBar.observe(navigationItem)
+  lazy private var appBar: MDCAppBarViewController = {
+    let appBar = MDCAppBarViewController()
 
-    let closeButton = UIBarButtonItem(image: UIImage(named: "close.png"), style: .plain, target:self, action:#selector(close(sender:)))
-    self.navigationItem.leftBarButtonItem = closeButton
-    self.navigationItem.rightBarButtonItem = signOutButton
+    let headerView = appBar.headerView
+    headerView.backgroundColor = UIColor.white
+    headerView.minimumHeight = topLayoutGuide.length + 104
+    headerView.maximumHeight = topLayoutGuide.length + 104
 
-    navBar.translatesAutoresizingMaskIntoConstraints = false
-    return navBar;
-  }
+    appBar.navigationBar.tintColor = UIColor(hex: "#202124")
+    appBar.navigationBar.uppercasesButtonTitles = false
+    appBar.navigationBar.titleViewLayoutBehavior = .fill
+
+    var attributes: [NSAttributedString.Key: Any] =
+      [NSAttributedString.Key.foregroundColor: UIColor(hex: "#202124")]
+    let font = UIFont(name: "Product Sans", size: 24)
+    if let font = font {
+      attributes[NSAttributedString.Key.font] = font
+    }
+    appBar.navigationBar.titleTextAttributes = attributes
+    appBar.navigationBar.titleViewLayoutBehavior = .center
+    appBar.inferTopSafeAreaInsetFromViewController = true
+
+    return appBar
+  }()
 
   private func setupScrollView() -> UIScrollView {
     let scrollView = UIScrollView ()
@@ -167,17 +208,17 @@ class UserAccountInfoViewController: UIViewController {
     stackView.axis = .vertical
     stackView.spacing = LayoutConstants.standardSpacing
     stackView.isLayoutMarginsRelativeArrangement = true
-    stackView.layoutMargins = UIEdgeInsetsMake(0,
-                                               LayoutConstants.horizontalMargin,
-                                               0,
-                                               LayoutConstants.horizontalMargin)
+    stackView.layoutMargins = UIEdgeInsets(top: 0,
+                                           left: LayoutConstants.horizontalMargin,
+                                           bottom: 0,
+                                           right: LayoutConstants.horizontalMargin)
     stackView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     return stackView
   }
 
   private func setupNameEmailStackView() -> UIStackView {
     let stackView = self.setupProfileStackView()
-    stackView.spacing = 1;
+    stackView.spacing = 1
     return stackView
   }
 
@@ -187,6 +228,7 @@ class UserAccountInfoViewController: UIViewController {
     button.translatesAutoresizingMaskIntoConstraints = false
     button.setBackgroundColor(ColorConstants.actionButton, for: .normal)
     button.addTarget(self, action: #selector(buttonTapped), for: .touchUpInside)
+    button.titleLabel?.enableAdjustFontForContentSizeCategory()
     return button
   }
 
@@ -196,7 +238,7 @@ class UserAccountInfoViewController: UIViewController {
                                  style: .plain,
                                  target: self,
                                  action: #selector(buttonTapped))
-    button.setTitleTextAttributes([.foregroundColor:ColorConstants.actionButton], for: .normal)
+    button.setTitleTextAttributes([.foregroundColor: ColorConstants.actionButton], for: .normal)
     return button
   }
 
@@ -217,7 +259,6 @@ class UserAccountInfoViewController: UIViewController {
   private func setupViews() {
     view.backgroundColor = .white
 
-    view.addSubview(navBar)
     view.addSubview(scrollView)
     scrollView.addSubview(stackView)
     stackView.addArrangedSubview(profileStackView)
@@ -227,29 +268,19 @@ class UserAccountInfoViewController: UIViewController {
 
     profileStackView.addArrangedSubview(thumbnailImageView)
     profileStackView.addArrangedSubview(nameEmailStackView)
+    profileStackView.addArrangedSubview(manageAccountView)
     profileStackView.addArrangedSubview(messageLabel)
     profileStackView.addArrangedSubview(actionButton)
 
     stackView.addArrangedSubview(settingsView)
     stackView.addArrangedSubview(builtWithView)
     stackView.addArrangedSubview(buildInfoView)
+    stackView.spacing = 16
 
     // Thumbnail view constraints.
     var constraints = [
       thumbnailImageView.heightAnchor.constraint(equalToConstant: LayoutConstants.thumbnailWidth),
-      thumbnailImageView.widthAnchor.constraint(equalToConstant:LayoutConstants.thumbnailWidth)
-    ]
-
-    // Navbar
-    if #available(iOS 11, *) {
-      constraints += [navBar.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor)]
-    } else {
-      constraints += [navBar.topAnchor.constraint(equalTo: view.topAnchor, constant: 20)]
-    }
-
-    constraints += [
-      navBar.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 1.0),
-      navBar.heightAnchor.constraint(equalToConstant: navBar.intrinsicContentSize.height)
+      thumbnailImageView.widthAnchor.constraint(equalToConstant: LayoutConstants.thumbnailWidth)
     ]
 
     // Settings and built with view
@@ -257,18 +288,17 @@ class UserAccountInfoViewController: UIViewController {
                     builtWithView.leadingAnchor.constraint(equalTo: stackView.leadingAnchor),
                     buildInfoView.leadingAnchor.constraint(equalTo: stackView.leadingAnchor)]
 
-
     // main scroll view
-    constraints += [scrollView.topAnchor.constraint(equalTo: navBar.bottomAnchor),
+    constraints += [scrollView.topAnchor.constraint(equalTo: topLayoutGuide.bottomAnchor),
                     scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: 1.0),
                     scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: 1.0),
                     scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 1.0)]
 
     // stack view
-    constraints += [stackView.leadingAnchor.constraint(equalTo:scrollView.leadingAnchor),
+    constraints += [stackView.leadingAnchor.constraint(equalTo: scrollView.leadingAnchor),
                     stackView.trailingAnchor.constraint(equalTo: scrollView.trailingAnchor),
-                    stackView.topAnchor.constraint(equalTo:scrollView.topAnchor),
-                    stackView.widthAnchor.constraint(equalTo:scrollView.widthAnchor)]
+                    stackView.topAnchor.constraint(equalTo: scrollView.topAnchor),
+                    stackView.widthAnchor.constraint(equalTo: scrollView.widthAnchor)]
 
     NSLayoutConstraint.activate(constraints)
   }
@@ -281,11 +311,8 @@ class UserAccountInfoViewController: UIViewController {
   }
 
   func attributedText(for text: String) -> NSAttributedString {
-    let data = text.data(using: .utf8)
-    let attributedText = NSAttributedString(htmlData: data,
-                                            options: attributedStringOptions,
-                                            documentAttributes: nil)!
-    return attributedText
+    let attributedText = InfoDetail.attributedText(detail: text)
+    return attributedText ?? NSAttributedString(string: "")
   }
 
   private enum AttributedStringConstants {
@@ -297,67 +324,90 @@ class UserAccountInfoViewController: UIViewController {
       paragraphStyle.paragraphSpacing = 0
       return paragraphStyle
     }()
-    static let options = [
-      DTDefaultFontName: UIFont.systemFont(ofSize: AttributedStringConstants.textSize).fontName,
-      DTDefaultFontFamily: UIFont.systemFont(ofSize: UIFont.systemFontSize).familyName,
-      DTDefaultFontSize: UIFont.systemFontSize,
-      DTUseiOS6Attributes: true,
-      DTDefaultTextColor: UIColor(hex: AttributedStringConstants.textColor),
-      DTDefaultLinkColor: UIColor(hex: AttributedStringConstants.linkColor),
-      DTDefaultLineHeightMultiplier: AttributedStringConstants.paragraphStyle.lineHeightMultiple,
-      DTDefaultStyleSheet: DTCSSStylesheet(styleBlock: AttributedStringConstants.css)
-      ] as [String : Any]
     static let textColor = "#747474"
     static let textSize: CGFloat = 14.0
   }
 
-  var attributedStringOptions: [String: Any] {
-    return AttributedStringConstants.options
-  }
-
   private func updateFromViewModel() {
-    if let viewModel = viewModel {
-      nameLabel.text = viewModel.userNameText
-      emailLabel.text = viewModel.userEmailText
+    nameLabel.text = viewModel.userNameText
+    emailLabel.text = viewModel.userEmailText
 
-      if let messageText = viewModel.messageText {
-        messageLabel.attributedText = attributedText(for: messageText)
-        messageLabel.textAlignment = .center
-        messageLabel.sizeToFit()
-      }
+    manageAccountView.isEnabled = viewModel.isSignedIn
 
-      actionButton.setTitle(viewModel.actionButtonText, for: .normal)
-
-      actionButton.isHidden = viewModel.isSignedIn
-      signOutButton.isEnabled = viewModel.isSignedIn
-
-      guard let thumbnailUrl = viewModel.thumbnailUrl else { return }
-      guard let url = URL(string: thumbnailUrl) else { return }
-
-      let filter = AspectScaledToFillSizeWithRoundedCornersFilter(
-        size: CGSize(width: Constants.profileImageWidth,
-                     height: Constants.profileImageHeight),
-        radius: Constants.profileImageRadius)
-      let placeHolder = UIImage(named: Constants.profilePlaceholderName)
-
-      thumbnailImageView.af_setImage(withURL: url, placeholderImage: placeHolder, filter: filter, imageTransition: .crossDissolve(0.2))
+    if let messageText = viewModel.messageText {
+      messageLabel.attributedText = attributedText(for: messageText)
+      messageLabel.textAlignment = .center
+      messageLabel.sizeToFit()
     }
+
+    actionButton.setTitle(viewModel.actionButtonText, for: .normal)
+
+    actionButton.isHidden = viewModel.isSignedIn
+    signOutButton.isEnabled = viewModel.isSignedIn
+    let placeHolder = UIImage(named: Constants.profilePlaceholderName)
+
+    guard let thumbnailURL = viewModel.thumbnailURL,
+      let url = URL(string: thumbnailURL) else {
+        thumbnailImageView.image = placeHolder
+        return
+    }
+
+    let filter = AspectScaledToFillSizeWithRoundedCornersFilter(
+      size: CGSize(width: Constants.profileImageWidth,
+                   height: Constants.profileImageHeight),
+      radius: Constants.profileImageRadius)
+
+    thumbnailImageView.af_setImage(withURL: url,
+                                   placeholderImage: placeHolder,
+                                   filter: filter,
+                                   imageTransition: .crossDissolve(0.2))
   }
 
   @objc func close(sender: UIBarButtonItem) {
-    self.dismiss(animated: true, completion: nil)
+    if let navController = self.navigationController {
+      navController.popViewController(animated: true)
+    } else {
+      self.dismiss(animated: true, completion: nil)
+    }
   }
 
   @objc func buttonTapped() {
-    guard let viewModel = viewModel else { return }
+    if viewModel.isSignedIn {
+      viewModel.signOut()
+    } else {
+      viewModel.presentSignIn()
+    }
+  }
 
-    self.dismiss(animated: true) {
-      if viewModel.isSignedIn {
-        viewModel.signOut()
-      }
-      else {
-        self.signIn()
-      }
+  // MARK: UIScrollViewDelegate
+
+  func scrollViewDidScroll(_ scrollView: UIScrollView) {
+    if scrollView == appBar.headerView.trackingScrollView {
+      appBar.headerView.trackingScrollDidScroll()
+    }
+  }
+
+  func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+    if scrollView == appBar.headerView.trackingScrollView {
+      appBar.headerView.trackingScrollDidEndDecelerating()
+    }
+  }
+
+  func scrollViewDidEndDragging(_ scrollView: UIScrollView,
+                                willDecelerate decelerate: Bool) {
+    let headerView = appBar.headerView
+    if scrollView == headerView.trackingScrollView {
+      headerView.trackingScrollDidEndDraggingWillDecelerate(decelerate)
+    }
+  }
+
+  func scrollViewWillEndDragging(_ scrollView: UIScrollView,
+                                 withVelocity velocity: CGPoint,
+                                 targetContentOffset: UnsafeMutablePointer<CGPoint>) {
+    let headerView = appBar.headerView
+    if scrollView == headerView.trackingScrollView {
+      headerView.trackingScrollWillEndDragging(withVelocity: velocity,
+                                               targetContentOffset: targetContentOffset)
     }
   }
 
@@ -374,21 +424,4 @@ extension UserAccountInfoViewController: UserAccountSettingsInfoViewDelegate {
     self.present(navController, animated: true, completion: nil)
   }
 
-}
-
-extension UserAccountInfoViewController {
-
-  func signIn() {
-    SignIn.sharedInstance.signIn { (user, error) in
-      guard error == nil else {
-        self.viewModel?.signInFailed(withError: error!)
-        return
-      }
-
-      if let user = user {
-        self.viewModel?.signInSuccessful(user: user)
-        self.dismiss(animated: true)
-      }
-    }
-  }
 }

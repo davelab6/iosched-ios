@@ -14,14 +14,14 @@
 //  limitations under the License.
 //
 
-import Foundation
+import UIKit
 
 public extension URL {
-  public func appendWidth(width: CGFloat) -> URL {
+  func appendWidth(width: CGFloat) -> URL {
     let roundedWidth = width.rounded(FloatingPointRoundingRule.up)
-    guard let newUrl = URL(string: self.absoluteString + "=s" + String(Int(roundedWidth))) else {
+    guard let newURL = URL(string: self.absoluteString + "=s" + String(Int(roundedWidth))) else {
       return self
     }
-    return newUrl
+    return newURL
   }
 }

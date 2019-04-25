@@ -15,7 +15,6 @@
 //
 
 import Foundation
-import Domain
 import GoogleSignIn
 import GTMSessionFetcher
 import FirebaseAuth
@@ -30,15 +29,15 @@ public protocol FCMRegistrationService {
 public class DefaultFCMRegistrationService: FCMRegistrationService {
 
   private let firestore: Firestore
-  private let auth: Auth
+  private let auth: CurrentUserProvider
 
-  init(firestore: Firestore = Firestore.firestore(), auth: Auth = Auth.auth()) {
+  init(firestore: Firestore = Firestore.firestore(), auth: CurrentUserProvider = Auth.auth()) {
     self.firestore = firestore
     self.auth = auth
   }
 
   public func register(device deviceId: String) {
-    guard let user = auth.currentUser else { return }
+    guard let user = auth.currentUserInfo else { return }
 
     guard let currentToken = Messaging.messaging().fcmToken else { return }
     if deviceId != currentToken {
@@ -50,7 +49,7 @@ public class DefaultFCMRegistrationService: FCMRegistrationService {
   }
 
   public func unregister(device deviceId: String) {
-    guard let user = auth.currentUser else { return }
+    guard let user = auth.currentUserInfo else { return }
 
     firestore.removeToken(deviceId, for: user)
   }

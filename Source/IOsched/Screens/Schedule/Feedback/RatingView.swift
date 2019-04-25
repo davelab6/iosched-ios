@@ -33,6 +33,32 @@ class RatingView: UIControl {
 
   private let starLayers: [CAShapeLayer]
 
+  private let poorLabel: UILabel = {
+    let label = UILabel()
+    label.translatesAutoresizingMaskIntoConstraints = false
+    label.enableAdjustFontForContentSizeCategory()
+    label.font = UIFont.preferredFont(forTextStyle: .caption1)
+    label.textColor = UIColor(red: 95 / 255, green: 99 / 255, blue: 104 / 255, alpha: 1)
+    label.numberOfLines = 1
+    label.text = NSLocalizedString("Poor",
+                                   comment: "Label on a rating selection UI of 1-5 where 1 is poor")
+    return label
+  }()
+
+  private let outstandingLabel: UILabel = {
+    let label = UILabel()
+    label.translatesAutoresizingMaskIntoConstraints = false
+    label.enableAdjustFontForContentSizeCategory()
+    label.font = UIFont.preferredFont(forTextStyle: .caption1)
+    label.textColor = UIColor(red: 95 / 255, green: 99 / 255, blue: 104 / 255, alpha: 1)
+    label.numberOfLines = 1
+    label.text = NSLocalizedString(
+      "Outstanding",
+      comment: "Label on a rating selection UI of 1-5 where 5 is outstanding"
+    )
+    return label
+  }()
+
   override init(frame: CGRect) {
     starLayers = (0 ..< 5).map {
       let layer = RatingView.starLayer()
@@ -44,6 +70,11 @@ class RatingView: UIControl {
     starLayers.forEach {
       layer.addSublayer($0)
     }
+
+    addSubview(poorLabel)
+    addSubview(outstandingLabel)
+
+    setupLabelConstraints()
   }
 
   private var starWidth: CGFloat {
@@ -121,7 +152,15 @@ class RatingView: UIControl {
   }
 
   override var intrinsicContentSize: CGSize {
-    return CGSize(width: 270, height: 50)
+    var starsSize = CGSize(width: 270, height: 50)
+    let extraHeight = 16 + poorLabel.intrinsicContentSize.height
+    starsSize.height += extraHeight
+    return starsSize
+  }
+
+  static var viewHeight: CGFloat {
+    let fontHeight = UIFont.preferredFont(forTextStyle: .caption1).lineHeight
+    return fontHeight + 50 + 16
   }
 
   override var isMultipleTouchEnabled: Bool {
@@ -136,13 +175,13 @@ class RatingView: UIControl {
 
     let mutablePath = CGMutablePath()
 
-    let outerRadius: CGFloat = 18
+    let outerRadius: CGFloat = 14
     let outerPoints = stride(from: CGFloat.pi / -5, to: .pi * 2, by: 2 * .pi / 5).map {
       return CGPoint(x: outerRadius * sin($0) + 25,
                      y: outerRadius * cos($0) + 25)
     }
 
-    let innerRadius: CGFloat = 6
+    let innerRadius: CGFloat = 6.5
     let innerPoints = stride(from: 0, to: .pi * 2, by: 2 * .pi / 5).map {
       return CGPoint(x: innerRadius * sin($0) + 25,
                      y: innerRadius * cos($0) + 25)
@@ -159,8 +198,8 @@ class RatingView: UIControl {
     mutablePath.closeSubpath()
 
     layer.path = mutablePath.copy()
-    layer.strokeColor = UIColor.gray.cgColor
-    layer.lineWidth = 1
+    layer.strokeColor = UIColor(red: 26 / 255, green: 115 / 255, blue: 232 / 255, alpha: 1).cgColor
+    layer.lineWidth = 2
     layer.fillColor = nil
 
     return layer
@@ -172,8 +211,8 @@ class RatingView: UIControl {
   }
 
   private enum Constants {
-    static let unhighlightedColor = UIColor.gray.cgColor
-    static let highlightedColor = UIColor(red: 28 / 255, green: 232 / 255, blue: 181 / 255, alpha: 1).cgColor
+    static let unhighlightedColor = UIColor(red: 26 / 255, green: 115 / 255, blue: 232 / 255, alpha: 1).cgColor
+    static let highlightedColor = UIColor(red: 26 / 255, green: 115 / 255, blue: 232 / 255, alpha: 1).cgColor
   }
 
   // MARK: Rating View Accessibility
@@ -194,7 +233,7 @@ class RatingView: UIControl {
   }
 
   override var accessibilityTraits: UIAccessibilityTraits {
-    get { return UIAccessibilityTraitAdjustable }
+    get { return UIAccessibilityTraits.adjustable }
     set {}
   }
 
@@ -209,6 +248,43 @@ class RatingView: UIControl {
     let currentRatingIndex = rating - 1
     let highlightedIndex = clamp(currentRatingIndex - 1)
     self.rating = highlightedIndex + 1
+  }
+
+  // MARK: - Constraints
+
+  private func setupLabelConstraints() {
+    let constraints = [
+      NSLayoutConstraint(item: poorLabel,
+                         attribute: .left,
+                         relatedBy: .equal,
+                         toItem: self,
+                         attribute: .left,
+                         multiplier: 1,
+                         constant: 0),
+      NSLayoutConstraint(item: poorLabel,
+                         attribute: .bottom,
+                         relatedBy: .equal,
+                         toItem: self,
+                         attribute: .bottom,
+                         multiplier: 1,
+                         constant: 0),
+      NSLayoutConstraint(item: outstandingLabel,
+                         attribute: .right,
+                         relatedBy: .equal,
+                         toItem: self,
+                         attribute: .right,
+                         multiplier: 1,
+                         constant: 0),
+      NSLayoutConstraint(item: outstandingLabel,
+                         attribute: .bottom,
+                         relatedBy: .equal,
+                         toItem: self,
+                         attribute: .bottom,
+                         multiplier: 1,
+                         constant: 0)
+    ]
+
+    addConstraints(constraints)
   }
 
 }

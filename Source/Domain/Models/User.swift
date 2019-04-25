@@ -20,9 +20,9 @@ public struct User {
   public let id: String
   public let name: String
   public let email: String
-  public let thumbnailUrl: String
+  public let thumbnailURL: String
 
-  public init(id: String, name: String, email: String, thumbnailUrl: String) {
-    self.id = id; self.name = name; self.email = email; self.thumbnailUrl = thumbnailUrl
+  public init(id: String, name: String, email: String, thumbnailURL: String) {
+    self.id = id; self.name = name; self.email = email; self.thumbnailURL = thumbnailURL
   }
 }

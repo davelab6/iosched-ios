@@ -14,7 +14,6 @@
 //  limitations under the License.
 //
 
-import Domain
 import FirebaseAuth
 import FirebaseFunctions
 
@@ -23,14 +22,14 @@ public enum FeedbackError: Error {
   case alreadySubmitted
   case formNotComplete
   case userNotSignedIn
-  case feedbackNotReceived
 
   case apiError(Error)
 }
 
 public final class FeedbackService {
 
-  private let userState: WritableUserState
+  private let userState: PersistentUserState
+  private let auth: CurrentUserProvider
 
   private lazy var firebaseFunctions = Functions.functions()
 
@@ -48,8 +47,7 @@ public final class FeedbackService {
       return
     }
 
-    let auth = Auth.auth()
-    guard auth.currentUser != nil else {
+    guard auth.currentUserInfo != nil else {
       completion(FeedbackError.userNotSignedIn)
       return
     }
@@ -62,14 +60,16 @@ public final class FeedbackService {
     })
   }
 
-  public init(userState: WritableUserState) {
+  public init(userState: PersistentUserState, auth: CurrentUserProvider = Auth.auth()) {
     self.userState = userState
+    self.auth = auth
   }
 
 // MARK: - Private Functions
 
-  func submitRating(forSessionWithID sessionID: String, survey: FeedbackSurvey,
-                    completion: @escaping (FeedbackError?) -> Void) {
+  private func submitRating(forSessionWithID sessionID: String,
+                            survey: FeedbackSurvey,
+                            completion: @escaping (FeedbackError?) -> Void) {
     var responses: [String: Int] = ["q1": 0, "q2": 0, "q3": 0, "q4": 0]
     for (question, answer) in survey.answers {
       let qId: String = "q" + String(question.id)
@@ -83,7 +83,7 @@ public final class FeedbackService {
           let message = error.localizedDescription
           let details = error.userInfo[FunctionsErrorDetailsKey] ?? "(nil)"
           print("Error Code=\(code); message=\(message):\(details); error: \(error)")
-          completion(FeedbackError.feedbackNotReceived)
+          completion(FeedbackError.apiError(error))
           return
         }
       }

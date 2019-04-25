@@ -58,8 +58,8 @@ public class TimeZoneAwareCalendar: NSCalendar {
 
 public extension TimeZone {
 
-  public static func userTimeZone() -> TimeZone {
-    return UserDefaults.standard.isEventsInPacificTime
+  static func userTimeZone() -> TimeZone {
+    return UserDefaults.standard.shouldDisplayEventsInPDT
         ? TimeZoneConstants.pacificTimeZone
         : self.autoupdatingCurrent
   }

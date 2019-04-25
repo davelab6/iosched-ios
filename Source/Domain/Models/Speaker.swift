@@ -16,38 +16,54 @@
 
 import Foundation
 
+/// A data type representing a session speaker.
 public struct Speaker {
+
+  /// A unique ID assigned to each speaker.
   public let id: String
+
+  /// The speaker's full name.
   public let name: String
+
+  /// A short paragraph describing the speaker.
   public let bio: String
+
+  /// The company the speaker works at.
   public let company: String
-  public let thumbnailUrl: URL?
-  public let plusOneUrl: URL?
-  public let twitterUrl: URL?
-  public let linkedinUrl: URL?
-  public let githubUrl: URL?
-  public let websiteUrl: URL?
+
+  /// The speaker's photo URL, if provided.
+  public let thumbnailURL: URL?
+
+  /// A link to the speaker's twitter profile.
+  public let twitterURL: URL?
+
+  /// A link to the speaker's linkedin profile.
+  public let linkedinURL: URL?
+
+  /// A link to the speaker's GitHub profile.
+  public let githubURL: URL?
+
+  /// A link to the speaker's personal website.
+  public let websiteURL: URL?
 
   public init(id: String,
               name: String,
               bio: String,
               company: String,
-              thumbnailUrl: URL?,
-              plusOneUrl: URL?,
-              twitterUrl: URL?,
-              linkedinUrl: URL?,
-              githubUrl: URL?,
-              websiteUrl: URL?) {
+              thumbnailURL: URL?,
+              twitterURL: URL?,
+              linkedinURL: URL?,
+              githubURL: URL?,
+              websiteURL: URL?) {
     self.id = id
     self.name = name
     self.bio = bio
     self.company = company
-    self.thumbnailUrl = thumbnailUrl
-    self.plusOneUrl = plusOneUrl
-    self.twitterUrl = twitterUrl
-    self.linkedinUrl = linkedinUrl
-    self.githubUrl = githubUrl
-    self.websiteUrl = websiteUrl
+    self.thumbnailURL = thumbnailURL
+    self.twitterURL = twitterURL
+    self.linkedinURL = linkedinURL
+    self.githubURL = githubURL
+    self.websiteURL = websiteURL
   }
 }
 
@@ -57,3 +73,5 @@ public func == (lhs: Speaker, rhs: Speaker) -> Bool {
   return lhs.id == rhs.id
     && lhs.name == rhs.name
 }
+
+extension Speaker: Hashable {}

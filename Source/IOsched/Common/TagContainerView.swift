@@ -55,7 +55,7 @@ class TagContainerView: UIView {
     var x: CGFloat = 0
     var y: CGFloat = 0
 
-    for view in self.subviews {
+    for view in subviews {
       if x > layoutWidth - view.intrinsicContentSize.width {
         y += view.intrinsicContentSize.height + Constants.yOffset
         x = 0
@@ -64,6 +64,18 @@ class TagContainerView: UIView {
       callback(view, rect)
 
       x += view.intrinsicContentSize.width + Constants.xOffset
+    }
+  }
+
+  func disableAccessibilitySelect() {
+    for view in subviews {
+      view.isAccessibilityElement = false
+    }
+  }
+
+  func enableAccessibilitySelect() {
+    for view in subviews {
+      view.isAccessibilityElement = true
     }
   }
 

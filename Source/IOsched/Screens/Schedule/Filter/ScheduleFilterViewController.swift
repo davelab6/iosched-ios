@@ -54,20 +54,19 @@ class ScheduleFilterViewController: BaseCollectionViewController {
     static let doneButtonTitle =
       NSLocalizedString("Done", comment: "Button title for done button on schedule filters page")
 
-    static let sectionHeaderFontName = "Product Sans"
-    static let sectionHeaderFontHeight: CGFloat = 16
-    static let sectionHeaderFont = UIFont(name: Constants.sectionHeaderFontName,
-                                          size: Constants.sectionHeaderFontHeight)
+    static func sectionHeaderFont() -> UIFont {
+      return ProductSans.regular.style(.callout)
+    }
   }
 
   @objc override func setupViews() {
     super.setupViews()
 
-    self.title = Constants.title
-    self.setupCollectionView()
+    title = Constants.title
+    setupCollectionView()
 
-    self.navigationItem.leftBarButtonItem = setupResetButton()
-    self.navigationItem.rightBarButtonItem = setupDoneButton()
+    navigationItem.leftBarButtonItem = setupResetButton()
+    navigationItem.rightBarButtonItem = setupDoneButton()
   }
 
   @objc override var minHeaderHeight: CGFloat {
@@ -88,7 +87,7 @@ class ScheduleFilterViewController: BaseCollectionViewController {
     collectionView?.register(ScheduleFilterCollectionViewCell.self,
                              forCellWithReuseIdentifier: ScheduleFilterCollectionViewCell.reuseIdentifier())
     collectionView?.register(MDCCollectionViewTextCell.self,
-                             forSupplementaryViewOfKind: UICollectionElementKindSectionHeader)
+                             forSupplementaryViewOfKind: UICollectionView.elementKindSectionHeader)
     styler.cellStyle = .default
     styler.shouldAnimateCellsOnAppearance = false
   }
@@ -98,7 +97,7 @@ class ScheduleFilterViewController: BaseCollectionViewController {
                                  style: .plain,
                                  target: self,
                                  action: #selector(resetAction))
-    button.setTitleTextAttributes([NSAttributedStringKey.foregroundColor: Constants.headerTextColor],
+    button.setTitleTextAttributes([NSAttributedString.Key.foregroundColor: Constants.headerTextColor],
                                   for: .normal)
     return button
   }
@@ -108,7 +107,7 @@ class ScheduleFilterViewController: BaseCollectionViewController {
                                  style: .done,
                                  target: self,
                                  action: #selector(doneAction))
-    button.setTitleTextAttributes([NSAttributedStringKey.foregroundColor: Constants.headerTextColor],
+    button.setTitleTextAttributes([NSAttributedString.Key.foregroundColor: Constants.headerTextColor],
                                   for: .normal)
     return button
   }
@@ -180,6 +179,8 @@ extension ScheduleFilterViewController {
         if let textLabel = normalCell.textLabel {
           textLabel.textColor = Constants.textColor
           textLabel.text = item.name
+          textLabel.font = UIFont.preferredFont(forTextStyle: .callout)
+          textLabel.enableAdjustFontForContentSizeCategory()
           // Add style for topics.
         }
       }
@@ -204,11 +205,11 @@ extension ScheduleFilterViewController {
                                                                for: indexPath)
 
     if let sectionHeader = view as? MDCCollectionViewTextCell {
-      if kind == UICollectionElementKindSectionHeader {
+      if kind == UICollectionView.elementKindSectionHeader {
         sectionHeader.shouldHideSeparator = true
         if let textLabel = sectionHeader.textLabel {
           textLabel.text = section.name
-          textLabel.font = Constants.sectionHeaderFont
+          textLabel.font = Constants.sectionHeaderFont()
           textLabel.textColor = Constants.textColor
         }
       }
@@ -268,7 +269,7 @@ class ScheduleFilterCollectionViewCell: MDCCollectionViewCell {
   private func setupTagButton() -> TagButton {
     let tagButton = TagButton()
     tagButton.translatesAutoresizingMaskIntoConstraints = false
-    tagButton.setElevation(ShadowElevation(rawValue: 0), for: UIControlState())
+    tagButton.setElevation(ShadowElevation(rawValue: 0), for: UIControl.State())
     tagButton.isUppercaseTitle = false
     tagButton.isAccessibilityElement = false
     tagButton.isUserInteractionEnabled = false
@@ -278,7 +279,7 @@ class ScheduleFilterCollectionViewCell: MDCCollectionViewCell {
   private func setupViews() {
     contentView.addSubview(tagButton)
 
-    let views: [String : UIView] = ["tag": tagButton]
+    let views: [String: UIView] = ["tag": tagButton]
 
     var constraints =
       NSLayoutConstraint.constraints(withVisualFormat: "H:|-16-[tag]",
@@ -297,12 +298,11 @@ class ScheduleFilterCollectionViewCell: MDCCollectionViewCell {
   private func updateFromViewModel() {
     if let viewModel = viewModel {
       tagButton.setTitle(viewModel.name, for: .normal)
-      let color = UIColor(hex: viewModel.color)
+      let color = viewModel.color.map(UIColor.init(hex:))
       tagButton.setBackgroundColor(color, for: .normal)
 
-      setNeedsLayout()
-      layoutIfNeeded()
       invalidateIntrinsicContentSize()
+      setNeedsLayout()
     }
   }
 }

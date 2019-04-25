@@ -25,13 +25,15 @@ class CollectionViewHeaderCell: UICollectionViewCell {
     super.init(frame: frame)
 
     textLabel = UILabel(frame: CGRect(x: 20, y: 10, width: frame.size.width - 40, height: frame.size.height/3))
-    textLabel.font = MDCTypography.subheadFont()
+    textLabel.font = UIFont.mdc_preferredFont(forMaterialTextStyle: .subheadline)
     textLabel.alpha = MDCTypography.subheadFontOpacity()
     textLabel.textAlignment = .natural
+    textLabel.enableAdjustFontForContentSizeCategory()
     textLabel.lineBreakMode = .byTruncatingTail
     contentView.addSubview(textLabel)
   }
 
+  @available(*, unavailable)
   required init?(coder aDecoder: NSCoder) {
     fatalError("init(coder:) has not been implemented")
   }

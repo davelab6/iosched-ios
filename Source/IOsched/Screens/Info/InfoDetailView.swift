@@ -15,17 +15,16 @@
 //
 
 import MaterialComponents
-import DTCoreText
 
 class InfoDetailView: UIView {
 
   private struct Constants {
 
-    static let detailFont = { () -> UIFont in return UIFont.preferredFont(forTextStyle: .body) }
+    static let detailFont = { () -> UIFont in return UIFont.preferredFont(forTextStyle: .callout) }
 
     static let paragraphStyle: NSParagraphStyle = { () -> NSParagraphStyle in
       let paragraphStyle = NSMutableParagraphStyle()
-      paragraphStyle.lineHeightMultiple = 24 / 15 // 24pt line
+      paragraphStyle.lineHeightMultiple = 24 / 15
       return paragraphStyle
     }()
 
@@ -33,46 +32,34 @@ class InfoDetailView: UIView {
     static let linkColor = UIColor(red: 61 / 255, green: 90 / 255, blue: 254 / 255, alpha: 1)
   }
 
-  /// The attributed string generated through DTCoreText.
+  /// The attributed string generated through WebKit, plus any additional attributes used by
+  /// this class specifically.
   static func attributedText(forDetailText detailText: String) -> NSAttributedString {
-    let data = detailText.data(using: .utf8)
-    let attributedText = NSAttributedString(htmlData: data,
-                                            options: Content.options(),
-                                            documentAttributes: nil)!
+    let rawString = InfoDetail.attributedText(detail: detailText)?.mutableCopy()
+    guard let attributed = rawString as? NSMutableAttributedString else {
+      return NSAttributedString(string: "")
+    }
 
-    return attributedText
+    let range = NSRange(location: 0, length: attributed.length)
+    attributed.addAttributes([
+      .paragraphStyle: Constants.paragraphStyle
+    ], range: range)
+    return attributed
   }
 
-  struct Content {
-    static let css = "a {" +
-      "font-weight: bold; " +
-      "text-decoration: none;" +
-    "}"
-
-    static func options() -> [String: Any] {
-      // This is a func and not a let so it'll correctly propogate changes
-      // if the detail font changes.
-      return [
-        DTDefaultFontName: Constants.detailFont().fontName,
-        DTDefaultFontFamily: Constants.detailFont().familyName,
-        DTDefaultFontSize: Constants.detailFont().pointSize,
-        DTUseiOS6Attributes: true,
-        DTDefaultTextColor: Constants.contentTextColor,
-        DTDefaultLinkColor: Constants.linkColor,
-        DTDefaultLinkHighlightColor: Constants.linkColor,
-        DTDefaultLineHeightMultiplier: Constants.paragraphStyle.lineHeightMultiple,
-        DTDefaultStyleSheet: DTCSSStylesheet(styleBlock: Content.css)
-      ]
-    }
+  private func attributedDescription(for infoDetail: InfoDetail) -> NSAttributedString {
+    return InfoDetailView.attributedText(forDetailText: infoDetail.detail)
   }
 
   let detailTextView = UITextView()
 
   var detail: InfoDetail {
     didSet {
-      let text = InfoDetailView.attributedText(forDetailText: detail.detail)
+      let text = attributedDescription(for: detail)
       detailTextView.attributedText = text
-      detailTextView.linkTextAttributes = [NSAttributedStringKey.foregroundColor.rawValue: Constants.linkColor]
+      detailTextView.linkTextAttributes = [
+        NSAttributedString.Key.foregroundColor: Constants.linkColor
+      ]
       setNeedsLayout()
     }
   }
@@ -87,7 +74,7 @@ class InfoDetailView: UIView {
   }
 
   override convenience init(frame: CGRect) {
-    let detail = InfoDetail.shuttleService
+    let detail = InfoDetail.whatToBring
     self.init(frame: frame, detail: detail)
   }
 
@@ -95,11 +82,16 @@ class InfoDetailView: UIView {
     detailTextView.translatesAutoresizingMaskIntoConstraints = false
     detailTextView.isScrollEnabled = false
     detailTextView.isEditable = false
+    detailTextView.font = Constants.detailFont()
 
-    detailTextView.attributedText = InfoDetailView.attributedText(forDetailText: detail.detail)
+    detailTextView.attributedText = attributedDescription(for: detail)
     detailTextView.textColor = Constants.contentTextColor
     detailTextView.textContainer.lineFragmentPadding = 0
     detailTextView.textContainerInset = .zero
+  }
+
+  var text: String? {
+    return detailTextView.attributedText.string
   }
 
   private func setupConstraints() {
@@ -146,16 +138,7 @@ class InfoDetailView: UIView {
                                                           height: CGFloat.greatestFiniteMagnitude),
                                              options: [.usesLineFragmentOrigin],
                                              context: nil).size.height
-    return textHeight
-  }
-
-  override func layoutSubviews() {
-    super.layoutSubviews()
-
-    // Since the string is attributed text generated from HTML, we need to regenerate the
-    // whole string.
-    let attributedText = InfoDetailView.attributedText(forDetailText: detail.detail)
-    detailTextView.attributedText = attributedText
+    return textHeight + 16 // bottom padding
   }
 
   @available(*, unavailable)

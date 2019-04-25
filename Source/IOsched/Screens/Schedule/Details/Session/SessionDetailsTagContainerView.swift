@@ -19,7 +19,7 @@ import MaterialComponents
 
 class SessionDetailsTagContainerView: TagContainerView {
 
-  var viewModel: [ScheduleEventDetailsTagViewModel]? {
+  var viewModel: [EventTag]? {
     didSet {
       updateFromViewModel()
     }
@@ -47,16 +47,14 @@ class SessionDetailsTagContainerView: TagContainerView {
       for tag in viewModel {
         let tagButton = TagButton()
         tagButton.translatesAutoresizingMaskIntoConstraints = false
-        tagButton.setElevation(ShadowElevation(rawValue: 0), for: .normal)
+        tagButton.setElevation(.none, for: .normal)
         tagButton.isUppercaseTitle = false
         tagButton.setTitle(tag.name, for: .normal)
-        let color = UIColor(hex: tag.color)
+        let color = tag.color
         tagButton.setBackgroundColor(color, for: .normal)
         self.addSubview(tagButton)
       }
 
-      setNeedsLayout()
-      layoutIfNeeded()
       invalidateIntrinsicContentSize()
     }
 

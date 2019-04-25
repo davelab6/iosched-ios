@@ -14,11 +14,7 @@
 //  limitations under the License.
 //
 
-import Foundation
-import Domain
-import Platform
 import MaterialComponents
-import FirebaseDatabase
 
 final class SessionDetailsViewModel {
 
@@ -27,46 +23,61 @@ final class SessionDetailsViewModel {
   }
 
   private enum CancellationConstants {
-    static let confirmCancellationTitle = NSLocalizedString("Confirm Cancellation", comment: "Confirm cancellation title")
-    static let confirmCancellationMessage = NSLocalizedString("Are you sure you want to cancel your session reservation?",
-                                                              comment: "Confirm cancellation message")
+    static let confirmCancellationTitle =
+        NSLocalizedString("Confirm Cancellation", comment: "Confirm cancellation title")
+    static let confirmCancellationMessage =
+        NSLocalizedString("Are you sure you want to cancel your session reservation?",
+                          comment: "Confirm reservation cancellation message")
 
-    static let confirmWaitlistCancellationTitle = NSLocalizedString("Cancel Waitlisting", comment: "Confirm cancellation title")
-    static let confirmWaitlistCancellationMessage = NSLocalizedString("Are you sure you want to cancel your waitlist request?",
-                                                              comment: "Confirm cancellation message")
+    static let confirmWaitlistCancellationTitle =
+        NSLocalizedString("Cancel Waitlisting", comment: "Confirm cancellation title")
+    static let confirmWaitlistCancellationMessage =
+        NSLocalizedString("Are you sure you want to cancel your waitlist request?",
+                          comment: "Confirm waitlisting cancellation message")
 
   }
 
   // MARK: - Dependencies
-  private let conferenceDataSource: ConferenceDataSource
-  private let bookmarkStore: WritableBookmarkStore
-  private let reservationStore: ReadonlyReservationStore
-  private let userState: WritableUserState
+  private let bookmarkDataSource: RemoteBookmarkDataSource
+  private let reservationDataSource: RemoteReservationDataSource
+  private let userState: PersistentUserState
   private let navigator: ScheduleNavigator
+  private let clashDetector: ReservationClashDetector
 
   // MARK: - Input
-  private let sessionId: String
+  private let session: Session
 
   // MARK: - Output
-  var scheduleEventDetailsViewModel: ScheduleEventDetailsViewModel?
+  var scheduleEventDetailsViewModel: ScheduleEventDetailsViewModel
   var processing = false
 
-  init(conferenceDataSource: ConferenceDataSource,
-       bookmarkStore: WritableBookmarkStore,
-       reservationStore: ReadonlyReservationStore,
-       userState: WritableUserState,
-       navigator: ScheduleNavigator,
-       sessionId: String) {
-    self.conferenceDataSource = conferenceDataSource
-    self.bookmarkStore = bookmarkStore
-    self.reservationStore = reservationStore
+  init(session: Session,
+       bookmarkDataSource: RemoteBookmarkDataSource,
+       reservationDataSource: RemoteReservationDataSource,
+       clashDetector: ReservationClashDetector,
+       userState: PersistentUserState,
+       navigator: ScheduleNavigator) {
+    self.session = session
+    self.bookmarkDataSource = bookmarkDataSource
+    self.reservationDataSource = reservationDataSource
     self.userState = userState
     self.navigator = navigator
+    self.clashDetector = clashDetector
 
-    self.sessionId = sessionId
+    let isBookmarked = bookmarkDataSource.isBookmarked(sessionID: session.id)
+    let isRegistered = userState.isUserRegistered
+    let seatsAvailable = reservationService?.seatsAvailable ?? false
+    let reservationStatus = reservationService?.reservationStatus ?? .none
+    self.scheduleEventDetailsViewModel =
+      ScheduleEventDetailsViewModel(session,
+                                    bookmarked: isBookmarked,
+                                    reservationStatus: reservationStatus,
+                                    clashDetector: clashDetector,
+                                    isUserRegistered: isRegistered,
+                                    seatsAvailable: seatsAvailable,
+                                    navigator: navigator)
 
     registerForDataLayerUpdates()
-    updateModel(forceUpdate: true)
   }
 
   // MARK: - View updates
@@ -77,9 +88,7 @@ final class SessionDetailsViewModel {
   }
 
   func updateView() {
-    DispatchQueue.main.async { [weak self] in
-      self?.viewUpdateCallback?()
-    }
+    self.viewUpdateCallback?()
   }
 
   // MARK: - Model updates
@@ -99,29 +108,48 @@ final class SessionDetailsViewModel {
     bookmarkUpdatesObserver = center.addObserver(forName: .bookmarkUpdate,
                                                  object: nil,
                                                  queue: nil) { [weak self] _ in
-      self?.updateModel()
-      self?.updateView()
+      guard let strongSelf = self else { return }
+      DispatchQueue.main.async {
+        strongSelf.updateModel()
+        strongSelf.updateView()
+      }
     }
 
-    reservationService = FirebaseReservationService2(sessionID: self.sessionId)
-      .onSeatAvailabilityUpdate { seatsAvailable in
+    reservationService = FirestoreReservationService(sessionID: session.id)
+      .onSeatAvailabilityUpdate { [weak self] _ in
+        guard let self = self else { return }
         self.processing = false
         self.updateModel()
         self.updateView()
       }
-      .onReservationProcessUpdate { reservationStatus in
-        self.reservationStore.updateReservationStatus(sessionId: self.sessionId,
-                                                      status: reservationStatus)
+      .onReservationStatusUpdate { [weak self] _ in
+        guard let self = self else { return }
+        self.processing = false
+        self.updateModel()
+        self.updateView()
+      }
+      .onReservationResultUpdate { [weak self] reservationResult in
+        guard let self = self else { return }
 
         self.processing = false
         self.updateModel()
         self.updateView()
-      }
-      .onReservationResultUpdate { reservationResult in
-        if reservationResult == .clash {
-          self.processing = false
-          self.updateView()
-          self.navigator.showReservationClashDialog()
+        switch reservationResult {
+        case .clash, .swapClash:
+          self.handleClash()
+        case .cancelled, .cancelCutoff, .cancelUnknown:
+          print("Reservation removed reservation with result: \(reservationResult)")
+        case .reserved:
+          print("Reservation successful")
+        case .waitlisted:
+          print("Waitlist successful")
+        case .swapped, .swapCutoff, .swapWaitlisted, .swapUnknown:
+          print("Swap: \(reservationResult.rawValue)")
+        case .unknown:
+          print("Reservation request returned unknown result")
+        case .cutoff:
+          // Display cutoff error
+          print("Reservation errored with cutoff")
         }
       }
   }
@@ -131,57 +159,44 @@ final class SessionDetailsViewModel {
     reservationService = nil
   }
 
-  private func updateModel(forceUpdate: Bool = false) {
-    if forceUpdate {
-      if let session = conferenceDataSource.session(by: sessionId) {
-        let isBookmarked = bookmarkStore.isBookmarked(sessionId: sessionId)
-        let isRegistered = userState.isUserRegistered
-        let seatsAvailable = reservationService?.seatsAvailable ?? false
-        let reservationStatus = reservationService?.reservationStatus ?? .none
-        self.scheduleEventDetailsViewModel =
-            ScheduleEventDetailsViewModel(session,
-                                          bookmarked: isBookmarked,
-                                          reservationStatus: reservationStatus,
-                                          isUserRegistered: isRegistered,
-                                          seatsAvailable: seatsAvailable,
-                                          conferenceDataSource: self.conferenceDataSource,
-                                          navigator: navigator)
-      }
-    }
-    else {
-      guard let currentViewModel = self.scheduleEventDetailsViewModel else { return }
-      let isBookmarked = bookmarkStore.isBookmarked(sessionId: sessionId)
-      let isRegistered = userState.isUserRegistered
-      let seatsAvailable = reservationService?.seatsAvailable ?? false
-      let reservationStatus = reservationService?.reservationStatus ?? .none
-
-      self.scheduleEventDetailsViewModel = ScheduleEventDetailsViewModel(currentViewModel,
-                                                                         bookmarked: isBookmarked,
-                                                                         reservationStatus: reservationStatus,
-                                                                         isUserRegistered: isRegistered,
-                                                                         seatsAvailable: seatsAvailable,
-                                                                         navigator: navigator)
-    }
+  private func updateModel() {
+    let isBookmarked = bookmarkDataSource.isBookmarked(sessionID: session.id)
+    let isRegistered = userState.isUserRegistered
+    let seatsAvailable = reservationService?.seatsAvailable ?? false
+    let reservationStatus = reservationService?.reservationStatus ?? .none
+    self.scheduleEventDetailsViewModel =
+        ScheduleEventDetailsViewModel(session,
+                                      bookmarked: isBookmarked,
+                                      reservationStatus: reservationStatus,
+                                      clashDetector: clashDetector,
+                                      isUserRegistered: isRegistered,
+                                      seatsAvailable: seatsAvailable,
+                                      navigator: navigator)
   }
 
   // MARK: - Actions
   func shareSession(sourceView: UIView?, sourceRect: CGRect? ) {
-    guard let title = scheduleEventDetailsViewModel?.title else { return }
-    guard let link = scheduleEventDetailsViewModel?.sessionUrl else { return }
+    let title = scheduleEventDetailsViewModel.title
+    let link = scheduleEventDetailsViewModel.sessionURL
 
-    let text = NSLocalizedString("Check out '\(title)' at #io18!", comment: "Template for sending session details. The parenthesized value 'title' will be an unlocalized session name.")
+    let text = NSLocalizedString("Check out '\(title)' at #io19!",
+        comment: "Template for sending session details. The parenthesized value 'title' will be an unlocalized session name.")
     navigator.shareSessionDetails(items: [text, link],
                                   sourceView: sourceView,
                                   sourceRect: sourceRect)
   }
 
   func openMap() {
-    navigator.navigateToMap(roomId: (scheduleEventDetailsViewModel?.roomId))
+    navigator.navigateToMap(roomId: scheduleEventDetailsViewModel.roomId)
   }
 
   func toggleBookmark() {
-    guard let sessionId = self.scheduleEventDetailsViewModel?.id else { return }
-    self.bookmarkStore.toggleBookmark(sessionId: sessionId)
+    let sessionID = self.scheduleEventDetailsViewModel.id
+    bookmarkDataSource.toggleBookmark(sessionID: sessionID)
+  }
+
+  func addToCalendar(completion: @escaping (Error?) -> Void) {
+    GoogleCalendarSessionAdder.addSessionToCalendar(session, completion: completion)
   }
 
   func toggleReservation() {
@@ -189,18 +204,21 @@ final class SessionDetailsViewModel {
 
     switch reservationService.reservationStatus {
     case .reserved:
-      navigator.showCancellationDialog(title: CancellationConstants.confirmCancellationTitle,
-                                       message: CancellationConstants.confirmCancellationMessage) { confirmCancellation in
+      navigator.showCancellationDialog(
+        title: CancellationConstants.confirmCancellationTitle,
+        message: CancellationConstants.confirmCancellationMessage
+      ) { confirmCancellation in
         if confirmCancellation {
           self.processing = true
           self.updateView()
-
           reservationService.attemptCancellation()
         }
       }
     case .waitlisted:
-      navigator.showCancellationDialog(title: CancellationConstants.confirmWaitlistCancellationTitle,
-                                       message: CancellationConstants.confirmWaitlistCancellationMessage) { confirmCancellation in
+      navigator.showCancellationDialog(
+        title: CancellationConstants.confirmWaitlistCancellationTitle,
+        message: CancellationConstants.confirmWaitlistCancellationMessage
+      ) { confirmCancellation in
         if confirmCancellation {
           self.processing = true
           self.updateView()
@@ -212,24 +230,72 @@ final class SessionDetailsViewModel {
       self.processing = true
       self.updateView()
 
-      reservationService.attemptReservation()
+      if let clash = clashDetector.clashes(for: session).first {
+        reservationService.attemptSwap(withConflictingSessionID: clash.id)
+      } else {
+        reservationService.attemptReservation()
+      }
     }
   }
 
+  func handleClash() {
+    let clashes = clashDetector.clashes(for: session)
+    switch clashes.count {
+    case 0:
+      break
+    case 1:
+      guard let clash = clashes.first else { return }
+      navigator.showReservationClashDialog {
+        self.attemptSwap(clashID: clash.id)
+      }
+    case _:
+      navigator.showMultiClashDialog()
+    }
+  }
+
+  func attemptSwap(clashID: String) {
+    processing = true
+    reservationService?.attemptSwap(withConflictingSessionID: clashID)
+  }
+
   func rateSession() {
-    guard let viewModel = self.scheduleEventDetailsViewModel else { return }
-    navigator.navigateToFeedback(sessionId: viewModel.id, title: viewModel.title)
+    let viewModel = self.scheduleEventDetailsViewModel
+    navigator.navigateToFeedback(sessionID: viewModel.id, title: viewModel.title)
   }
 
   func detailsViewController(_ index: IndexPath) -> UIViewController? {
-    if index.row > 0,
-      let speakerViewModels = scheduleEventDetailsViewModel?.speakers, index.row - 1 < speakerViewModels.count {
+    let speakerViewModels = scheduleEventDetailsViewModel.speakers
+    if index.row > 0, index.row - 1 < speakerViewModels.count {
       let speakerViewModel = speakerViewModels[index.row - 1]
       return navigator.speakerDetailsViewController(for: speakerViewModel.speaker)
     }
 
     return nil
   }
+
+  func headerImageForRoom() -> UIImage? {
+    switch session.roomName {
+    case "Amphitheatre", "Stage 1", "Stage 2", "Stage 3", "Stage 4", "Stage 5", "Stage 6", "Stage 7", "Stage 8":
+      if let image = UIImage(named: "session_\(session.roomName)") {
+        return image
+      }
+    case _:
+      break
+    }
+    if session.roomName.contains("Reviews") {
+      if let image = UIImage(named: "session_officeHours") {
+        return image
+      }
+    }
+    if session.roomName.contains("Codelabs") {
+      if let image = UIImage(named: "session_codelabs") {
+        return image
+      }
+    }
+
+    return UIImage(named: "session_extra")
+  }
+
 }
 
 struct ScheduleEventDetailsViewModel {
@@ -250,6 +316,9 @@ struct ScheduleEventDetailsViewModel {
     static let reservationButtonTitleReserved =
       NSLocalizedString("Seat reserved",
                         comment: "Text for button when seat is reserved")
+    static let reservationButtonTitleSwap =
+      NSLocalizedString("Swap reservation",
+                        comment: "Text for button to swap an existing reservation with a new reservation")
     static let reservationButtonTitleJoinWaitlist =
       NSLocalizedString("Join waitlist",
                         comment: "Button label for joining waitlist")
@@ -263,15 +332,13 @@ struct ScheduleEventDetailsViewModel {
 
   let id: String
   let title: String
-  let sessionUrl: URL
-  let youtubeUrl: URL?
-  let time: String
-  let startTimestamp: Date
+  let sessionURL: URL
+  let youtubeURL: URL?
   let location: String
   let roomId: String
   let detail: String //description
-  let mainTag: ScheduleEventDetailsTagViewModel?
-  let tags: [ScheduleEventDetailsTagViewModel]
+  let mainTag: EventTag?
+  let tags: [EventTag]
   let speakers: [ScheduleEventDetailsSpeakerViewModel]
   let isBookmarked: Bool
   let reservationStatus: ReservationStatus
@@ -287,14 +354,22 @@ struct ScheduleEventDetailsViewModel {
 
   let seatsAvailable: Bool
 
+  let session: Session
+
+  var time: String {
+    let date = Formatters.dateFormatter.string(from: session.startTimestamp)
+    let startTime = Formatters.timeFormatter.string(from: session.startTimestamp)
+    let endTime = Formatters.timeFormatter.string(from: session.endTimestamp)
+    return "\(date), \(startTime) - \(endTime)"
+  }
+
   private let feedbackAllowedAfterTimestamp: Date
   var canShowRateSessionButton: Bool {
-    return Date() >= feedbackAllowedAfterTimestamp
+    return Date() >= feedbackAllowedAfterTimestamp && session.type == .sessions
   }
 
   var headerBackgroundColor: UIColor {
-    guard let hexColor = mainTag?.color else { return Constants.headerBackgroundColor }
-    return UIColor(hex: hexColor)
+    return mainTag?.color ?? Constants.headerBackgroundColor
   }
 
   var bookmarkPreviewActionTitle: String {
@@ -328,12 +403,7 @@ struct ScheduleEventDetailsViewModel {
     case .waitlisted:
       return MDCPalette.grey.tint200
     case .none:
-      if seatsAvailable {
-        return MDCPalette.indigo.accent200!
-      }
-      else {
-        return MDCPalette.indigo.accent200!
-      }
+      return UIColor(red: 26 / 255, green: 115 / 255, blue: 232 / 255, alpha: 1)
     }
   }
 
@@ -355,36 +425,37 @@ struct ScheduleEventDetailsViewModel {
 
   // if there is less than one hour between now and session start, cut off has passed
   var reservationTimeCutoffHasPassed: Bool {
-    let now = Date()
-    let difference = startTimestamp.timeIntervalSince(now)
+    let difference = session.startTimestamp.timeIntervalSinceNow
     return difference <= Constants.reservationCutOff
   }
 
   var reserveButtonLabel: String {
+    let clash = clashDetector.clashes(for: session).count > 0
     switch reservationStatus {
     case .reserved:
       return Constants.reservationButtonTitleReserved
     case .waitlisted:
       return Constants.reservationButtonTitleWaitlisted
     case .none:
-      if seatsAvailable && !reservationTimeCutoffHasPassed {
-        return Constants.reservationButtonTitleReserve
-      }
-      else if reservationTimeCutoffHasPassed {
+      if reservationTimeCutoffHasPassed {
         return Constants.reservationCutOffHasPassed
       }
-      else {
+      if !seatsAvailable {
         return Constants.reservationButtonTitleJoinWaitlist
       }
+      if clash {
+        return Constants.reservationButtonTitleSwap
+      }
+      return Constants.reservationButtonTitleReserve
     }
   }
 
   var reserveButtonFontColor: UIColor {
     switch reservationStatus {
     case .reserved:
-      return MDCPalette.indigo.accent200!
+      return UIColor(red: 26 / 255, green: 115 / 255, blue: 232 / 255, alpha: 1)
     case .waitlisted:
-      return MDCPalette.indigo.accent200!
+      return UIColor(red: 26 / 255, green: 115 / 255, blue: 232 / 255, alpha: 1)
     case .none:
       if seatsAvailable {
         return UIColor.white
@@ -396,27 +467,22 @@ struct ScheduleEventDetailsViewModel {
   }
 
   var shouldDisplayVideoplayer: Bool {
-    return youtubeUrl != nil
+    return youtubeURL != nil
   }
 
   init(_ session: Session,
        bookmarked: Bool,
        reservationStatus: ReservationStatus,
+       clashDetector: ReservationClashDetector,
        isUserRegistered: Bool,
        seatsAvailable: Bool,
-       conferenceDataSource: ConferenceDataSource,
        navigator: ScheduleNavigator) {
     self.navigator = navigator
+    self.session = session
     id = session.id
     title = session.title
-    sessionUrl = session.url
-    youtubeUrl = session.youtubeUrl
-
-    let date = Formatters.dateFormatter.string(from: session.startTimestamp)
-    startTimestamp = session.startTimestamp
-    let startTime = Formatters.timeFormatter.string(from: session.startTimestamp)
-    let endTime = Formatters.timeFormatter.string(from: session.endTimestamp)
-    time = "\(date), \(startTime) - \(endTime)"
+    sessionURL = session.url
+    youtubeURL = session.youtubeURL
 
     feedbackAllowedAfterTimestamp = session.endTimestamp - Constants.feedbackTimeBeforeSessionEnd
 
@@ -424,18 +490,8 @@ struct ScheduleEventDetailsViewModel {
     roomId = session.roomId
 
     detail = session.detail
-
-    tags = conferenceDataSource.allTopics.filter { conferenceTag -> Bool in
-      return session.tagNames.contains(conferenceTag.name)
-      }.map { conferenceTag -> ScheduleEventDetailsTagViewModel in
-        let colorHex = conferenceTag.colorString ?? "#efefef"
-        return ScheduleEventDetailsTagViewModel(name: conferenceTag.name, color: colorHex)
-    }
-
-    mainTag = tags.filter {
-      guard let eventTag = EventTag(name: $0.name) else { return false }
-      return eventTag.name == session.mainTagId
-    }.first
+    tags = session.tags
+    mainTag = session.mainTopic
 
     speakers = session.speakers
     .map { (speaker) -> ScheduleEventDetailsSpeakerViewModel in
@@ -448,41 +504,16 @@ struct ScheduleEventDetailsViewModel {
     self.isUserRegistered = isUserRegistered
     self.seatsAvailable = seatsAvailable
 
-    isReservable = session.type == .session && isUserRegistered
+    isReservable = isUserRegistered && session.isReservable
 
     self.reservationStatus = reservationStatus
+    self.clashDetector = clashDetector
   }
 
-  init(_ viewModel: ScheduleEventDetailsViewModel,
-       bookmarked: Bool,
-       reservationStatus: ReservationStatus,
-       isUserRegistered: Bool,
-       seatsAvailable: Bool,
-       navigator: ScheduleNavigator) {
-    self.id = viewModel.id
-    self.title = viewModel.title
-    self.sessionUrl = viewModel.sessionUrl
-    self.youtubeUrl = viewModel.youtubeUrl
-    self.time = viewModel.time
-    self.startTimestamp = viewModel.startTimestamp
-    self.location = viewModel.location
-    self.roomId = viewModel.roomId
-    self.detail = viewModel.detail
-    self.tags = viewModel.tags
-    self.mainTag = viewModel.mainTag
-    self.speakers = viewModel.speakers
-    self.isBookmarked = bookmarked
-    self.isBookmarkable = viewModel.isBookmarkable
-    self.reservationStatus = reservationStatus
-    self.isReservable = viewModel.isReservable
-    self.isUserRegistered = isUserRegistered
-    self.seatsAvailable = seatsAvailable
-    self.feedbackAllowedAfterTimestamp = viewModel.feedbackAllowedAfterTimestamp
-    self.navigator = navigator
-  }
+  private let clashDetector: ReservationClashDetector
 
   func rateSession() {
-    navigator.navigateToFeedback(sessionId: id, title: title)
+    navigator.navigateToFeedback(sessionID: id, title: title)
   }
 }
 
@@ -507,7 +538,7 @@ extension ScheduleEventDetailsViewModel {
 struct ScheduleEventDetailsSpeakerViewModel {
   let name: String
   let company: String
-  let thumbnailUrl: URL?
+  let thumbnailURL: URL?
   let id: String
   let speaker: Speaker
   private let navigator: ScheduleNavigator
@@ -517,28 +548,12 @@ struct ScheduleEventDetailsSpeakerViewModel {
 
     name = speaker.name
     company = speaker.company
-    thumbnailUrl = speaker.thumbnailUrl
+    thumbnailURL = speaker.thumbnailURL
     id = speaker.id
     self.speaker = speaker
   }
 
   func selectSpeaker(speaker: Speaker) {
     navigator.navigateToSpeakerDetails(speaker: speaker, popToRoot: false)
-  }
-}
-
-struct ScheduleEventReleatedSessionViewModel {
-  let title: String
-  let durationAndLocation: String
-  // tags
-}
-
-struct ScheduleEventDetailsTagViewModel {
-  let name: String
-  let color: String
-
-  public init(name: String, color: String) {
-    self.name = name
-    self.color = color
   }
 }

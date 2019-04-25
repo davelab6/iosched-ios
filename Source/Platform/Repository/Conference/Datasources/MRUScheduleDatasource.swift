@@ -14,33 +14,29 @@
 //  limitations under the License.
 //
 
-import Foundation
-import Domain
 import FirebaseFirestore
 
-class MRUScheduleDatasource: ConferenceData, UpdatableDatasource {
+/// A class responsible for syncing sessions data with Firestore.
+class MRUScheduleDatasource: AutoUpdatingConferenceData {
 
   private var scheduleDetailsQuerySnapshot: QuerySnapshot?
   private var listener: ListenerRegistration?
 
-  var conference: Conference? {
-    // TODO(thkien): refactor data transformation logic into Conference+Firestore.swift instead.
+  var conference: [Session] {
     var sessions: [Session] = []
-    guard let snapshot = scheduleDetailsQuerySnapshot else { return nil }
+    guard let snapshot = scheduleDetailsQuerySnapshot else { return [] }
     for scheduleDetail in snapshot.documents {
       if let session = Session(scheduleDetail: scheduleDetail) {
         sessions.append(session)
       }
     }
-    return Conference(map: Map(mapMetadata: nil),
-                      rooms: [],
-                      sessions: sessions,
-                      blocks: [],
-                      speakers: [],
-                      tags: [])
+    return sessions
   }
 
-  func update(_ completion: @escaping (Bool) -> Void) {
+  /// Populates the receiver with data from Firestore and subscribes to automatic data updates.
+  /// On every new update, the updateHandler will be invoked with a bool flag indicating
+  /// whether or not the update contained new data.
+  func subscribeToUpdates(_ updateHandler: @escaping (Bool) -> Void) {
     let scheduleDetails = Firestore.firestore().scheduleDetails
     listener?.remove()
     listener = scheduleDetails.addSnapshotListener { [weak self] (querySnapshot, error) in
@@ -49,7 +45,7 @@ class MRUScheduleDatasource: ConferenceData, UpdatableDatasource {
       }
       self?.scheduleDetailsQuerySnapshot = querySnapshot
       let hasChanges = querySnapshot.map { $0.documentChanges.count > 0 } ?? false
-      completion(hasChanges)
+      updateHandler(hasChanges)
     }
   }
 

@@ -20,23 +20,23 @@ import MaterialComponents
 class TagButton: MDCRaisedButton {
 
   enum Constants {
-    static let cornerRadius: CGFloat = 12
-    static let fontSize: CGFloat  = 12
-    static let intrinsicHeight: CGFloat = 24
     static let lightTitleColor = UIColor.white
     static let darkTitleColor = UIColor(hex: "#202124")
   }
 
-  var cornerRadius: CGFloat = Constants.cornerRadius
-
   override init(frame: CGRect) {
     super.init(frame: frame)
     isUserInteractionEnabled = false
-    setTitleFont(MDCTypography.fontLoader().mediumFont(ofSize: Constants.fontSize),
-                 for: .normal)
+    let font = UIFont.mdc_preferredFont(forMaterialTextStyle: .caption)
+    setTitleFont(font, for: .normal)
+    registerForDynamicTypeUpdates()
   }
 
-  override func setBackgroundColor(_ backgroundColor: UIColor?, for state: UIControlState) {
+  deinit {
+    NotificationCenter.default.removeObserver(self)
+  }
+
+  override func setBackgroundColor(_ backgroundColor: UIColor?, for state: UIControl.State) {
     super.setBackgroundColor(backgroundColor, for: state)
     guard let backgroundColor = backgroundColor else {
       setTitleColor(Constants.darkTitleColor, for: state)
@@ -50,22 +50,39 @@ class TagButton: MDCRaisedButton {
     }
   }
 
+  @available(*, unavailable)
   required init?(coder aDecoder: NSCoder) {
     fatalError("init(coder:) has not been implemented")
   }
 
   override var intrinsicContentSize: CGSize {
-    let size = super.intrinsicContentSize
-    return CGSize(width: size.width, height: Constants.intrinsicHeight)
+    let superSize = super.intrinsicContentSize
+    guard let font = titleFont(for: .normal) else { return superSize }
+    let height = font.lineHeight + 8
+    return CGSize(width: superSize.width, height: height)
   }
 
   override var accessibilityTraits: UIAccessibilityTraits {
     get {
       return isUserInteractionEnabled
-        ? UIAccessibilityTraitButton
-        : UIAccessibilityTraitStaticText
+        ? UIAccessibilityTraits.button
+        : UIAccessibilityTraits.staticText
     }
     set {
     }
   }
+
+  func registerForDynamicTypeUpdates() {
+    NotificationCenter.default.addObserver(self,
+                                           selector: #selector(dynamicTypeTextSizeDidChange(_:)),
+                                           name: UIContentSizeCategory.didChangeNotification,
+                                           object: nil)
+  }
+
+  @objc func dynamicTypeTextSizeDidChange(_ sender: Any) {
+    let font = UIFont.mdc_preferredFont(forMaterialTextStyle: .caption)
+    setTitleFont(font, for: .normal)
+    setNeedsLayout()
+  }
+
 }

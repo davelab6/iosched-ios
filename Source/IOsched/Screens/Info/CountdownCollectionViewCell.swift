@@ -25,7 +25,6 @@ class CountdownCollectionViewCell: MDCCollectionViewCell {
     countdownView.translatesAutoresizingMaskIntoConstraints = false
     addSubview(countdownView)
     addConstraints(countdownConstraints(countdownView))
-    countdownView.play()
     isUserInteractionEnabled = false
   }
 
@@ -33,8 +32,6 @@ class CountdownCollectionViewCell: MDCCollectionViewCell {
   required init?(coder aDecoder: NSCoder) {
     fatalError("init(coder:) is not supported")
   }
-
-  public static let reuseIdentifier = "CountdownCollectionViewCell"
 
   private func countdownConstraints(_ countdownView: UIView) -> [NSLayoutConstraint] {
     return [
@@ -45,7 +42,7 @@ class CountdownCollectionViewCell: MDCCollectionViewCell {
       NSLayoutConstraint(item: countdownView, attribute: .centerY,
                          relatedBy: .equal,
                          toItem: self, attribute: .centerY,
-                         multiplier: 1, constant: 0),
+                         multiplier: 1, constant: 0)
     ]
   }
 
@@ -54,7 +51,7 @@ class CountdownCollectionViewCell: MDCCollectionViewCell {
   }
 
   deinit {
-    countdownView.stop()
+    countdownView.removeFromSuperview()
   }
 
 }

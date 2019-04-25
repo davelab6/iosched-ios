@@ -144,15 +144,15 @@ class SessionDetailsCollectionViewSpeakerCell: MDCCollectionViewCell {
       companyLabel.text = viewModel.company
 
       let placeholder = UIImage(named: LayoutConstants.profilePlaceholderName)
-      if let url = viewModel.thumbnailUrl {
+      if let url = viewModel.thumbnailURL {
         let filter = AspectScaledToFillSizeWithRoundedCornersFilter(
           size: CGSize(width: LayoutConstants.profileImageWidth,
                        height: LayoutConstants.profileImageHeight),
           radius: LayoutConstants.profileImageRadius
         )
 
-        let sizeAdjustedUrl = url.appendWidth(width: LayoutConstants.thumbnailDownloadWidth)
-        thumbnailImageView.af_setImage(withURL: sizeAdjustedUrl,
+        let sizeAdjustedURL = url.appendWidth(width: LayoutConstants.thumbnailDownloadWidth)
+        thumbnailImageView.af_setImage(withURL: sizeAdjustedURL,
                                        placeholderImage: placeholder,
                                        filter: filter,
                                        imageTransition: .crossDissolve(LayoutConstants.transitionDuration))
@@ -162,7 +162,6 @@ class SessionDetailsCollectionViewSpeakerCell: MDCCollectionViewCell {
       }
 
       setNeedsLayout()
-      layoutIfNeeded()
       invalidateIntrinsicContentSize()
     }
   }

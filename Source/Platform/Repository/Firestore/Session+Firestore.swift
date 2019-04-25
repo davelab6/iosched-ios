@@ -14,15 +14,11 @@
 //  limitations under the License.
 //
 
-import Domain
 import FirebaseFirestore
 
 extension URL {
   init?(string: String?) {
-    guard let string = string else {
-      return nil
-    }
-    if string.isEmpty {
+    guard let string = string, !string.isEmpty else {
       return nil
     }
     self.init(string: string)
@@ -37,36 +33,31 @@ extension Session {
     let description = data["description"] as? String
     let startTimestamp = data["startTimestamp"] as? NSNumber
     let endTimestamp = data["endTimestamp"] as? NSNumber
-    let isLivestream = data["livestream"] as? NSNumber
     let room = data["room"] as? [String: Any]
-    let roomId = room!["id"] as? String
-    let roomName = room!["name"] as? String
+    let roomId = room?["id"] as? String
+    let roomName = room?["name"] as? String
     let tags = data["tags"] as? [[String: Any]]
-    var tagNames: [String] = []
-    var tagColor: String?
+    var eventTags: [EventTag] = []
     if let tags = tags {
       for tag: [String: Any] in tags {
-        if let tagName = tag["name"] as? String {
-          tagNames.append(tagName)
+        if let eventTag = EventTag(dictionary: tag) {
+          eventTags.append(eventTag)
         }
-        let color = tag["color"] as? String
-        tagColor = color ?? nil
       }
     }
     var speakers: [Speaker] = []
-    let speakersData = data["speakers"] as? [[String: Any]]
-    if let speakersData = speakersData {
-      for speakerData: [String: Any] in speakersData {
+    if let speakersData = data["speakers"] as? [[String: Any]] {
+      for speakerData in speakersData {
         let speakerId = speakerData["id"] as? String
         let speakerName = speakerData["name"] as? String
         let speakerBio = speakerData["bio"] as? String
         let speakerCompany = speakerData["company"] as? String
-        let speakerThumbnailUrl = URL(string: speakerData["thumbnailUrl"] as? String)
+        let speakerThumbnailURL = URL(string: speakerData["thumbnailURL"] as? String)
         let speakerSocialLinks = (speakerData["socialLinks"] as? [String: Any]) ?? [String: Any]()
-        let speakerTwitterUrl = URL(string: speakerSocialLinks["Twitter"] as? String)
-        let speakerGithubUrl = URL(string: speakerSocialLinks["GitHub"] as? String)
-        let speakerLinkedInUrl = URL(string: speakerSocialLinks["LinkedIn"] as? String)
-        let speakerWebsiteUrl = URL(string: speakerSocialLinks["Website"] as? String)
+        let speakerTwitterURL = URL(string: speakerSocialLinks["Twitter"] as? String)
+        let speakerGithubURL = URL(string: speakerSocialLinks["GitHub"] as? String)
+        let speakerLinkedInURL = URL(string: speakerSocialLinks["LinkedIn"] as? String)
+        let speakerWebsiteURL = URL(string: speakerSocialLinks["Website"] as? String)
         if let speakerId = speakerId,
            let speakerName = speakerName,
            let speakerBio = speakerBio,
@@ -75,18 +66,17 @@ extension Session {
                                 name: speakerName,
                                 bio: speakerBio,
                                 company: speakerCompany,
-                                thumbnailUrl: speakerThumbnailUrl,
-                                plusOneUrl: nil,
-                                twitterUrl: speakerTwitterUrl,
-                                linkedinUrl: speakerGithubUrl,
-                                githubUrl: speakerLinkedInUrl,
-                                websiteUrl: speakerWebsiteUrl)
+                                thumbnailURL: speakerThumbnailURL,
+                                twitterURL: speakerTwitterURL,
+                                linkedinURL: speakerGithubURL,
+                                githubURL: speakerLinkedInURL,
+                                websiteURL: speakerWebsiteURL)
           speakers.append(speaker)
         }
       }
     }
     self.speakers = speakers
-    let youtubeUrl = data["youtubeUrl"] as? String
+    let youtubeURL = data["youtubeUrl"] as? String
 
     // Check for required fields and abort if missing.
     if let id = id,
@@ -94,25 +84,20 @@ extension Session {
        let description = description,
        let startTimestamp = startTimestamp,
        let endTimestamp = endTimestamp,
-       let url = URL(string: "https://events.google.com/io/schedule?sid=" + id) {
+       let url = URL(string: "https://events.google.com/io/schedule/events/" + id) {
       self.id = id
       self.url = url
       self.title = title
       self.detail = description
-      self.startTimestamp = Date(timeIntervalSince1970: startTimestamp.doubleValue/1000)
-      self.endTimestamp = Date(timeIntervalSince1970: endTimestamp.doubleValue/1000)
-      self.isLivestream = isLivestream?.boolValue ?? false
-      self.youtubeUrl = youtubeUrl.flatMap(URL.init(string:))
-      self.tagNames = tagNames
-      self.mainTagId = ""
-      self.color = tagColor ?? "#FFFFFF"
-      self.speakerIds = []
-      // TODO(morganchen): find a better default value (or don't)
-      self.roomId = roomId ?? "unknown"
-      self.roomName = roomName ?? ""
+      self.startTimestamp = Date(timeIntervalSince1970: startTimestamp.doubleValue / 1000)
+      self.endTimestamp = Date(timeIntervalSince1970: endTimestamp.doubleValue / 1000)
+      self.youtubeURL = youtubeURL.flatMap(URL.init(string:))
+      self.tags = eventTags
+      self.mainTopic = eventTags.filter { $0.type == .topic } .first
+      self.roomId = roomId ?? "(unknown)"
+      self.roomName = roomName ?? "(TBA)"
     } else {
       print("Malformed data: \(data)")
-      assert(false)
       return nil
     }
   }

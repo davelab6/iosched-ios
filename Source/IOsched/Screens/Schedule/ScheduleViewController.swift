@@ -19,43 +19,24 @@ import Firebase
 import Foundation
 import GoogleSignIn
 import MaterialComponents
-import Platform
 
 class ScheduleViewController: BaseCollectionViewController {
 
-  private enum MyIOLayoutConstants {
-    static let placeholderImageName = "ic_account_circle"
-    static let userImageDimension = 72
-    static let avatarImageWidth = 24
-    static let avatarImageSize = CGSize(width: MyIOLayoutConstants.avatarImageWidth,
-                                        height: MyIOLayoutConstants.avatarImageWidth)
-  }
-
   fileprivate enum TooltipsConstants {
     static let titleColor = "#424242"
-    static let titleFont = "Product Sans"
-    static let titleFontSize: CGFloat = 20
-    static let subtitleColor = "#747474"
-    static let filterIcon: UIImage? = UIImage(named: "ic_myio_off")
-    static let saveIcon: UIImage? = UIImage(named: "ic_session_bookmark-dark")
-    static let reserveIcon: UIImage? = UIImage(named: "ic_session_reserve-dark")
-    static let buttonColor = "#4768fd"
-    static let buttonFont = "Product Sans"
-    static let buttonFontSize: CGFloat = 14
   }
 
   private let agendaDataSource = AgendaDataSource()
-  lazy var filterBar: FilterBar = self.setupFilterBar()
-  lazy var filterButton: MDCFloatingButton = self.setupFilterFloatingButton()
-  fileprivate lazy var accountButton: UIBarButtonItem = self.setupAccountButton(tint: true)
-  lazy var switchBarButton: MDCFlatButton = MDCFlatButton()
-  var showBookmarkedAndReserved: Bool = false
-  lazy var tabBar: MDCTabBar = self.setupTabBar()
-  lazy var agendaTabBarItem = self.setupAgendaTabBarItem()
-  lazy var emptyMyIOView = ScheduleCollectionEmptyView()
+  private lazy var filterBar: FilterBar = self.setupFilterBar()
+  private lazy var filterButton: MDCFloatingButton = self.setupFilterFloatingButton()
+  private lazy var switchBarButton: MDCFlatButton = MDCFlatButton()
+  private var showBookmarkedAndReserved: Bool = false
+  private lazy var tabBar: MDCTabBar = self.setupTabBar()
+  private lazy var emptyMyIOView = ScheduleCollectionEmptyView()
+
   var selectedTabIndex = 0 {
     didSet {
-      collectionView?.reloadData()
+      scheduleViewModel.collectionView(collectionView, scrollToDay: selectedTabIndex)
       updateBackgroundView()
       logSelectedDay()
     }
@@ -63,24 +44,21 @@ class ScheduleViewController: BaseCollectionViewController {
 
   func selectDay(day: Int) {
     if day < tabBar.items.count {
-      selectedTabIndex = day
       tabBar.selectedItem = tabBar.items[day]
-      currentViewModel.selectedDay = selectedTabIndex
+      selectedTabIndex = day
     }
   }
 
-  var currentViewModel: ScheduleComposedViewModel
-  let scheduleViewModel: ScheduleComposedViewModel
-  let myIOViewModel: MyIOComposedViewModel
+  let scheduleViewModel: ScheduleDisplayableViewModel
 
-  init(viewModel: ScheduleComposedViewModel, myIOViewModel: MyIOComposedViewModel) {
+  init(viewModel: ScheduleDisplayableViewModel,
+       searchViewController: SearchCollectionViewController) {
     self.scheduleViewModel = viewModel
-    self.currentViewModel = viewModel
-    self.myIOViewModel = myIOViewModel
-    let layout = ScheduleCollectionViewLayout()
+    self.searchViewController = searchViewController
+    let layout = SideHeaderCollectionViewLayout()
     layout.headerReferenceSize = CGSize(width: 60, height: 8)
     layout.estimatedItemSize = CGSize(width: UIScreen.main.bounds.size.width, height: 120)
-    super.init(collectionViewLayout: ScheduleCollectionViewLayout())
+    super.init(collectionViewLayout: SideHeaderCollectionViewLayout())
   }
 
   @available(*, unavailable)
@@ -95,101 +73,21 @@ class ScheduleViewController: BaseCollectionViewController {
   override func viewDidLoad() {
     super.viewDidLoad()
     collectionView?.backgroundColor = .white
-    showInitialTooltipsIfNeeded()
-    registerForAccountUpdates()
+    collectionView?.dataSource = scheduleViewModel
     registerForViewUpdates()
     registerForDynamicTypeUpdates()
     refreshContent()
+    collectionView.showsVerticalScrollIndicator = true
   }
 
   override func viewDidAppear(_ animated: Bool) {
     super.viewDidAppear(animated)
     logSelectedDay()
   }
-  
-  func showInitialTooltipsIfNeeded() {
-    if (!DefaultServiceLocator.sharedInstance.userState.shouldShowInitialTooltips) {
-      return;
-    }
-
-    let alertController: MDCAlertController =
-        MDCAlertController(title: NSLocalizedString("Customize your schedule",
-                                                    comment: "Tooltips title"),
-                           message:"")
-    alertController.addAction(MDCAlertAction(title: "Got it", handler: { (action: MDCAlertAction) in
-      alertController.dismiss(animated: true, completion: nil)
-    }))
-    alertController.titleFont = UIFont(name: TooltipsConstants.titleFont, size: TooltipsConstants.titleFontSize)
-    alertController.titleColor = UIColor(hex: TooltipsConstants.titleColor)
-    alertController.messageColor = UIColor(hex: TooltipsConstants.subtitleColor)
-    alertController.buttonFont = UIFont(name: TooltipsConstants.buttonFont, size: TooltipsConstants.buttonFontSize)
-    alertController.buttonTitleColor = UIColor(hex: TooltipsConstants.buttonColor)
-
-    // Using private API of MDCAlertControllerView for customization.
-    if (alertController.view.responds(to: NSSelectorFromString("messageLabel"))) {
-      let messageLabel: UILabel = alertController.view.perform(NSSelectorFromString("messageLabel")).takeUnretainedValue() as! UILabel
-
-      let tooltipsMutableString = NSMutableAttributedString()
-      let attributes = [
-        NSAttributedStringKey.foregroundColor: UIColor(hex: TooltipsConstants.subtitleColor),
-        ] as [NSAttributedStringKey : Any]
-
-      let filterAttachment = NSTextAttachment()
-      filterAttachment.image = TooltipsConstants.filterIcon
-      filterAttachment.bounds = CGRect(x: 0, y: -5, width: (filterAttachment.image?.size.width)!, height: (filterAttachment.image?.size.height)!)
-
-      let filterAttachmentString = NSAttributedString(attachment: filterAttachment)
-      let filterString = NSAttributedString(string: String(format: "   %@\n\n", NSLocalizedString("View only your events", comment: "Tooltips explanation of filtering")), attributes:attributes)
-
-      tooltipsMutableString.append(filterAttachmentString)
-      tooltipsMutableString.append(filterString)
-      
-      let saveAttachment = NSTextAttachment()
-      saveAttachment.image = TooltipsConstants.saveIcon
-      saveAttachment.bounds = CGRect(x: 0, y: -4, width: (saveAttachment.image?.size.width)!, height: (saveAttachment.image?.size.height)!)
-      let saveAttachmentString = NSAttributedString(attachment: saveAttachment)
-      let saveString = NSAttributedString(string: String(format: "   %@\n\n", NSLocalizedString("Save an event", comment: "Tooltips explanation of saving an event")), attributes:attributes)
-      
-      tooltipsMutableString.append(NSAttributedString(string: " "))
-      tooltipsMutableString.append(saveAttachmentString)
-      tooltipsMutableString.append(saveString)
-      
-      let reserveAttachment = NSTextAttachment()
-      reserveAttachment.image = TooltipsConstants.reserveIcon
-      reserveAttachment.bounds = CGRect(x: 0, y: -7, width: (reserveAttachment.image?.size.width)!, height: (reserveAttachment.image?.size.height)!)
-      let reserveAttachmentString = NSAttributedString(attachment: reserveAttachment)
-      let reserveString = NSAttributedString(string: String(format: "   %@", NSLocalizedString("Reserve a session seat", comment: "Tooltips explanation of reserving an event")), attributes:attributes)
-      
-      tooltipsMutableString.append(NSAttributedString(string: " "))
-      tooltipsMutableString.append(reserveAttachmentString)
-      tooltipsMutableString.append(reserveString)
-
-      messageLabel.attributedText = tooltipsMutableString
-    }
-    self.present(alertController, animated: true) {
-      DefaultServiceLocator.sharedInstance.userState.setInitialTooltipsShown(true)
-    }
-  }
-
-  func registerForAccountUpdates() {
-    // update avatar first ...
-    self.updateAvatarImage()
-
-    // ... then register for subsequent updates
-    SignIn.sharedInstance
-      .onSignIn {
-        self.updateAvatarImage()
-        self.refreshContent()
-      }
-      .onSignOut {
-        self.updateAvatarImage()
-        self.refreshContent()
-    }
-  }
 
   func registerForViewUpdates() {
-    currentViewModel.onUpdate { indexPath in
-      self.performViewUpdate(indexPath: indexPath)
+    scheduleViewModel.onUpdate { [weak self] indexPath in
+      self?.performViewUpdate(indexPath: indexPath)
     }
   }
 
@@ -204,10 +102,9 @@ class ScheduleViewController: BaseCollectionViewController {
 
   private func updateTabBarItems() {
 
-    let items = currentViewModel.conferenceDays.map {
+    let items = scheduleViewModel.conferenceDays.map {
       UITabBarItem(title: $0.dayString, image: nil, tag: 0)
     }
-    + [agendaTabBarItem]
     tabBar.items = items
   }
 
@@ -217,7 +114,7 @@ class ScheduleViewController: BaseCollectionViewController {
       selectedIndex = tabBar.items.index(of: selectedItem) ?? 0
     }
 
-    if currentViewModel.conferenceDays.count > 0 {
+    if scheduleViewModel.conferenceDays.count > 0 {
       updateTabBarItems()
       tabBar.selectedItem = tabBar.items[selectedIndex]
     }
@@ -225,63 +122,29 @@ class ScheduleViewController: BaseCollectionViewController {
     updateBackgroundView()
     self.collectionView?.reloadData()
 
-    if let filterString = currentViewModel.wrappedModel.filterViewModel.filterString {
+    if let filterString = scheduleViewModel.wrappedModel.filterViewModel.filterString {
       filterBar.isFilterVisible = true
       filterBar.filterText = filterString
     } else {
       filterBar.isFilterVisible = false
     }
-    // Update header bar height.
-    let headerView = appBar.headerViewController.headerView
+    // Update header bar height, in case filters have changed.
+    let headerView = appBar.headerView
     headerView.minimumHeight = minHeaderHeight
     headerView.maximumHeight = maxHeaderHeight
 
     appBar.headerStackView.setNeedsLayout()
   }
 
-  func updateAvatarImage() {
-    if let user = GIDSignIn.sharedInstance().currentUser {
-      if let url = user.profile.imageURL(withDimension: UInt(MyIOLayoutConstants.userImageDimension)) {
-        self.downloadAvatarImage(url)
-      }
-    }
-    else {
-      if let placeholderImage = self.placeholderImage {
-        self.accountImage = placeholderImage
-      }
-      self.updateAccountButton(tint: true)
-    }
-  }
-
   private func updateBackgroundView() {
-    if tabBar.selectedItem == agendaTabBarItem {
-      collectionView?.backgroundView = nil
-    } else if currentViewModel === myIOViewModel &&
-      myIOViewModel.isEmpty(forDayWithIndex: selectedTabIndex) {
+    if scheduleViewModel.wrappedModel.shouldShowOnlySavedItems &&
+      scheduleViewModel.isEmpty() {
       collectionView?.backgroundView = emptyMyIOView.configureForMyIO()
-    } else if (currentViewModel.wrappedModel.filterViewModel.filterString != nil) &&
-      currentViewModel.isEmpty() {
+    } else if scheduleViewModel.wrappedModel.filterViewModel.filterString != nil &&
+      scheduleViewModel.isEmpty() {
       collectionView?.backgroundView = emptyMyIOView.configureForEmptyFilter()
     } else {
       collectionView?.backgroundView = nil
-    }
-  }
-
-  let placeholderImage = UIImage(named: MyIOLayoutConstants.placeholderImageName)?
-      .withRenderingMode(.alwaysTemplate)
-  lazy var accountImage: UIImage? = self.placeholderImage
-
-  lazy var imageDownloader: ImageDownloader = ImageDownloader()
-  lazy var avatarFilter = AspectScaledToFillSizeCircleFilter(size: MyIOLayoutConstants.avatarImageSize)
-
-  func downloadAvatarImage(_ url: URL) {
-    let urlRequest = URLRequest(url: url)
-
-    imageDownloader.download(urlRequest, filter: avatarFilter) { response in
-      if let image = response.result.value {
-        self.accountImage = image
-        self.updateAccountButton(tint: false)
-      }
     }
   }
 
@@ -307,41 +170,6 @@ class ScheduleViewController: BaseCollectionViewController {
     return super.maxHeaderHeight
   }
 
-  private class HeaderStack: UIView {
-    private var views = [UIView]()
-
-    override init(frame: CGRect) {
-      super.init(frame: frame)
-    }
-
-    required init?(coder aDecoder: NSCoder) {
-      fatalError("init(coder:) has not been implemented")
-    }
-
-    override func sizeThatFits(_ size: CGSize) -> CGSize {
-      let totalHeight = views.map { $0.sizeThatFits(size).height }.reduce(0, +)
-      return CGSize(width: size.width, height: totalHeight)
-    }
-
-    override func layoutSubviews() {
-      super.layoutSubviews()
-      // Layout bottom to top using each item's size.
-      var remainingSize = bounds.size
-      for view in views.reversed() {
-        let viewHeight = view.sizeThatFits(remainingSize).height
-        let y = max(0, remainingSize.height - viewHeight)
-        let height = min(viewHeight, remainingSize.height)
-        view.frame = CGRect(x: 0, y: y, width: remainingSize.width, height: height)
-        remainingSize = CGSize(width: remainingSize.width, height: remainingSize.height - height)
-      }
-    }
-
-    func add(view: UIView) {
-      views.append(view)
-      addSubview(view)
-    }
-  }
-
   @objc override func setupViews() {
     super.setupViews()
 
@@ -359,34 +187,32 @@ class ScheduleViewController: BaseCollectionViewController {
   }
 
   func setupConstraints() {
-    let tabBarOffset = self.tabBarController?.tabBar.frame.height ?? 0
-    filterButton.bottomAnchor.constraint(equalTo: self.view.bottomAnchor,
-                                         constant: -(tabBarOffset + Constants.bottomButtonOffset)).isActive = true
-    // TODO(benwlee): filterButton will also need to account for bottom notification bar appearing.
+    filterButton.bottomAnchor.constraint(equalTo: self.bottomLayoutGuide.topAnchor,
+                                         constant: -(Constants.bottomButtonOffset)).isActive = true
     filterButton.trailingAnchor.constraint(equalTo: self.view.trailingAnchor,
                                            constant: -(Constants.bottomButtonOffset)).isActive = true
   }
 
   func setupNavigationBarActions() {
-    self.navigationItem.leftBarButtonItem = accountButton
-    self.navigationItem.rightBarButtonItem = setupSwitchBarButton()
+    navigationItem.leftBarButtonItem = setupSwitchBarButton()
+    navigationItem.rightBarButtonItem = setupSearchButton()
   }
 
-  @objc override func setupAppBar() -> MDCAppBar {
+  @objc override func setupAppBar() -> MDCAppBarViewController {
     let appBar = super.setupAppBar()
 
     appBar.headerStackView.topBar = nil
 
     let stack = HeaderStack()
     stack.add(view: appBar.navigationBar)
-    stack.add(view: self.tabBar)
-    stack.add(view: self.filterBar)
+    stack.add(view: tabBar)
+    stack.add(view: filterBar)
 
     appBar.headerStackView.bottomBar = stack
     appBar.headerStackView.setNeedsLayout()
 
     // Update header bar height.
-    let headerView = appBar.headerViewController.headerView
+    let headerView = appBar.headerView
     headerView.minimumHeight = minHeaderHeight
     headerView.maximumHeight = maxHeaderHeight
 
@@ -406,42 +232,16 @@ class ScheduleViewController: BaseCollectionViewController {
     return tabBar
   }
 
-  func setupAgendaTabBarItem() -> UITabBarItem {
-    let title = NSLocalizedString("Agenda",
-                                  comment: "Title of a tab button displaying schedule information")
-    return UITabBarItem(title: title, image: nil, tag: 0)
-  }
-
   func setupFilterBar() -> FilterBar {
-    let filterBar = FilterBar()
-    filterBar.scheduleViewModel = currentViewModel.wrappedModel
+    let filterBar = FilterBar(frame: .zero, viewModel: scheduleViewModel.wrappedModel)
     return filterBar
-  }
-
-  func updateAccountButton(tint: Bool) {
-    self.accountButton = setupAccountButton(tint: tint)
-    setupNavigationBarActions()
-  }
-
-  func setupAccountButton(tint: Bool) -> UIBarButtonItem {
-    let image = self.accountImage
-    let button = UIBarButtonItem.init(image: image,
-                                      style: .plain,
-                                      target: self,
-                                      action: #selector(accountAction))    
-    if tint {
-      button.tintColor = headerForegroundColor
-    }
-    button.accessibilityLabel = NSLocalizedString("User account information",
-                                                  comment: "Accessibility label for user account button")
-    return button
   }
 
   func setupFilterFloatingButton() -> MDCFloatingButton {
     filterButton = MDCFloatingButton()
     filterButton.translatesAutoresizingMaskIntoConstraints = false
     filterButton.addTarget(self, action: #selector(filterAction), for: .touchUpInside)
-    filterButton.backgroundColor = UIColor(hex: "#4768fd")
+    filterButton.backgroundColor = UIColor(red: 26 / 255, green: 115 / 255, blue: 232 / 255, alpha: 1)
     let filterImage = UIImage(named: "ic_filter_selected")?.withRenderingMode(.alwaysTemplate)
     filterButton.setImage(filterImage, for: .normal)
     filterButton.tintColor = UIColor.white
@@ -452,7 +252,7 @@ class ScheduleViewController: BaseCollectionViewController {
   }
 
   func setupSwitchBarButton() -> UIBarButtonItem {
-    switchBarButton.setImage(UIImage(named:"ic_myio_off"), for: .normal)
+    switchBarButton.setImage(UIImage(named: "ic_myio_off"), for: .normal)
     switchBarButton.imageView?.contentMode = .scaleAspectFit
     switchBarButton.imageEdgeInsets = UIEdgeInsets(top: -4, left: -8, bottom: -4, right: -8)
     switchBarButton.contentHorizontalAlignment = .fill
@@ -465,15 +265,33 @@ class ScheduleViewController: BaseCollectionViewController {
     return UIBarButtonItem(customView: barButtonContainerView)
   }
 
+  func setupSearchButton() -> UIBarButtonItem {
+    let button = MDCFlatButton()
+    button.setImage(UIImage(named: "ic_search"), for: .normal)
+    button.imageView?.contentMode = .scaleAspectFit
+    button.contentHorizontalAlignment = .fill
+    button.contentVerticalAlignment = .fill
+    button.addTarget(self, action: #selector(showSearchController(_:)), for: .touchUpInside)
+    button.accessibilityLabel =
+      NSLocalizedString("Search",
+                        comment: "Accessibility label for the search button")
+    button.sizeToFit()
+
+    let barButtonContainerView: BarButtonContainerView = BarButtonContainerView(view: button)
+    return UIBarButtonItem(customView: barButtonContainerView)
+  }
+
+  public let searchViewController: SearchCollectionViewController
+
   func setupCollectionView() {
     collectionView?.register(ScheduleViewCollectionViewCell.self,
                              forCellWithReuseIdentifier: ScheduleViewCollectionViewCell.reuseIdentifier())
-    collectionView?.register(IOSchedCollectionViewHeaderCell.self,
-                             forSupplementaryViewOfKind: UICollectionElementKindSectionHeader,
-                             withReuseIdentifier: IOSchedCollectionViewHeaderCell.reuseIdentifier())
-    collectionView?.register(AgendaCollectionViewHeaderCell.self,
-                             forSupplementaryViewOfKind: UICollectionElementKindSectionHeader,
-                             withReuseIdentifier: AgendaCollectionViewHeaderCell.reuseIdentifier())
+    collectionView?.register(ScheduleSectionHeaderReusableView.self,
+                             forSupplementaryViewOfKind: UICollectionView.elementKindSectionHeader,
+                             withReuseIdentifier: ScheduleSectionHeaderReusableView.reuseIdentifier())
+    collectionView?.register(AgendaSectionHeaderReusableView.self,
+                             forSupplementaryViewOfKind: UICollectionView.elementKindSectionHeader,
+                             withReuseIdentifier: AgendaSectionHeaderReusableView.reuseIdentifier())
     collectionView?.register(AgendaCollectionViewCell.self,
                              forCellWithReuseIdentifier: AgendaCollectionViewCell.reuseIdentifier())
     styler.cellStyle = .default
@@ -487,7 +305,7 @@ class ScheduleViewController: BaseCollectionViewController {
     Application.sharedInstance.analytics.logEvent(AnalyticsEventSelectContent, parameters: [
       AnalyticsParameterContentType: AnalyticsParameters.screen,
       AnalyticsParameterItemID: itemID
-      ])
+    ])
   }
 
   override var screenName: String? {
@@ -504,49 +322,50 @@ class ScheduleViewController: BaseCollectionViewController {
 
 // MARK: - MDCTabBarDelegate
 extension ScheduleViewController: MDCTabBarDelegate {
+
   func tabBar(_ tabBar: MDCTabBar, didSelect item: UITabBarItem) {
-    selectedTabIndex = tabBar.items.index(of: item) ?? 0
-    if selectedTabIndex < currentViewModel.conferenceDays.count {
-      currentViewModel.selectedDay = selectedTabIndex
-    } else {
-      updateBackgroundView()
-      collectionView?.reloadData()
-    }
+    guard let itemIndex = tabBar.items.index(of: item) else { return }
+    selectedTabIndex = itemIndex
   }
+
+  func tabBar(_ tabBar: MDCTabBar, shouldSelect item: UITabBarItem) -> Bool {
+    guard let itemIndex = tabBar.items.index(of: item) else { return false }
+    let section = Int(itemIndex)
+    let sectionIsEmpty = scheduleViewModel.isEmpty(forDayWithIndex: section)
+
+    return !sectionIsEmpty
+  }
+
 }
 
 // MARK: - Actions
 extension ScheduleViewController {
-  @objc func accountAction() {
-    currentViewModel.accountSelected()
-  }
 
   @objc func filterAction() {
-    currentViewModel.filterSelected()
+    scheduleViewModel.filterSelected()
   }
 
   @objc func switchButtonTapped() {
     if !showBookmarkedAndReserved {
-      self.switchBarButton.setImage(UIImage(named:"ic_myio_on"), for: .normal)
+      self.switchBarButton.setImage(UIImage(named: "ic_myio_on"), for: .normal)
       self.showBookmarkedAndReserved = true
-      self.currentViewModel = self.myIOViewModel
+      scheduleViewModel.showOnlySavedEvents()
       switchBarButton.accessibilityLabel = Constants.myIOToggleAccessibilityLabelOn
     } else {
-      self.switchBarButton.setImage(UIImage(named:"ic_myio_off"), for: .normal)
+      self.switchBarButton.setImage(UIImage(named: "ic_myio_off"), for: .normal)
       self.showBookmarkedAndReserved = false
-      self.currentViewModel = self.scheduleViewModel
+      scheduleViewModel.showAllEvents()
       switchBarButton.accessibilityLabel = Constants.myIOToggleAccessibilityLabelOff
     }
-    if tabBar.selectedItem != agendaTabBarItem {
-      currentViewModel.selectedDay = selectedTabIndex
-      self.refreshUI()
-    }
+    self.refreshUI()
+  }
+
+  @objc func showSearchController(_ sender: Any) {
+    navigationController?.pushViewController(searchViewController, animated: true)
   }
 
   func refreshContent() {
-    DefaultServiceLocator.sharedInstance.updateConferenceData { [weak self] in
-      self?.currentViewModel.updateModel()
-    }
+    scheduleViewModel.updateModel()
   }
 }
 
@@ -556,94 +375,49 @@ extension ScheduleViewController {
   override func collectionView(_ collectionView: UICollectionView,
                                layout collectionViewLayout: UICollectionViewLayout,
                                referenceSizeForHeaderInSection section: Int) -> CGSize {
-    guard tabBar.selectedItem != agendaTabBarItem else {
-      return CGSize(width: view.frame.size.width, height: 48)
-    }
-    var size = currentViewModel.sizeForHeader(inSection: section, inFrame: collectionView.bounds)
-    size.height = 8 // totally not a hack
+    var size = scheduleViewModel.sizeForHeader(inSection: section, inFrame: collectionView.bounds)
+    guard size.height > 0 else { return size }
+    size.height = 8 // hack
     return size
   }
 
-  override func collectionView(_ collectionView: UICollectionView, cellHeightAt indexPath: IndexPath) -> CGFloat {
-    if tabBar.selectedItem == agendaTabBarItem {
-      return AgendaCollectionViewCell.cellHeight
-    }
-    let leftInset = (collectionViewLayout as? ScheduleCollectionViewLayout)?.dateWidth ?? 0
+  override func collectionView(_ collectionView: UICollectionView,
+                               cellHeightAt indexPath: IndexPath) -> CGFloat {
+    let leftInset = (collectionViewLayout as? SideHeaderCollectionViewLayout)?.dateWidth ?? 0
     var frame = collectionView.bounds
     frame.size.width -= leftInset
-    return currentViewModel.heightForCell(at: indexPath, inFrame: frame)
+    return scheduleViewModel.heightForCell(at: indexPath, inFrame: frame)
   }
 
-  override func collectionView(_ collectionView: UICollectionView, shouldHideHeaderBackgroundForSection section: Int) -> Bool {
+  override func collectionView(_ collectionView: UICollectionView,
+                               shouldHideHeaderBackgroundForSection section: Int) -> Bool {
     return true
-  }
-
-  override func collectionView(_ collectionView: UICollectionView, cellBackgroundColorAt indexPath: IndexPath) -> UIColor? {
-    return currentViewModel.backgroundColor(at: indexPath) ?? .white
   }
 
 }
 
-// MARK: - UICollectionViewDataSource
+// MARK: - UICollectionViewDelegate
+
 extension ScheduleViewController {
 
-  override func numberOfSections(in collectionView: UICollectionView) -> Int {
-    if tabBar.selectedItem == agendaTabBarItem {
-      return agendaDataSource.numberOfSections(in: collectionView)
-    }
-    return currentViewModel.numberOfSections()
-  }
-
   override func collectionView(_ collectionView: UICollectionView,
-                               numberOfItemsInSection section: Int) -> Int {
-    if tabBar.selectedItem == agendaTabBarItem {
-      return agendaDataSource.collectionView(collectionView, numberOfItemsInSection: section)
-    }
-    let numberOfItemsIn = currentViewModel.numberOfItemsIn(section: section)
-    return numberOfItemsIn
+                               didSelectItemAt indexPath: IndexPath) {
+    super.collectionView(collectionView, didSelectItemAt: indexPath)
+    scheduleViewModel.collectionView(collectionView, didSelectItemAt: indexPath)
   }
 
-  override func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
-    if tabBar.selectedItem == agendaTabBarItem {
-      return agendaDataSource.collectionView(collectionView, cellForItemAt: indexPath)
-    }
-    if let cellClass = currentViewModel.cellClassForItemAt(indexPath: indexPath) {
-      let cell = collectionView.dequeueReusableCell(withReuseIdentifier: cellClass.reuseIdentifier(), for: indexPath)
-      currentViewModel.populateCell(cell, forItemAt: indexPath)
-      return cell
-    }
-    fatalError("This should not happen.")
-  }
+  override func scrollViewDidScroll(_ scrollView: UIScrollView) {
+    super.scrollViewDidScroll(scrollView)
+    guard let collectionView = scrollView as? UICollectionView else { return }
 
-  override func collectionView(_ collectionView: UICollectionView,
-                               viewForSupplementaryElementOfKind kind: String,
-                               at indexPath: IndexPath) -> UICollectionReusableView {
-    if tabBar.selectedItem == agendaTabBarItem {
-      return agendaDataSource.collectionView(collectionView,
-                                             viewForSupplementaryElementOfKind: kind,
-                                             at: indexPath)
+    // Updates the tab bar's selection without scrolling if the user scrolls to the
+    // next day.
+    guard scrollView.isDragging else { return }
+    guard let firstVisibleItem = collectionView.indexPathsForVisibleItems.first else { return }
+    let dayForItem = scheduleViewModel.dayForSection(firstVisibleItem.section)
+    if tabBar.selectedItem != tabBar.items[dayForItem] {
+      tabBar.setSelectedItem(tabBar.items[dayForItem], animated: true)
     }
-    guard let viewClass = currentViewModel.supplementaryViewClass(ofKind: kind, forItemAt: indexPath) else {
-      fatalError("ViewModel must provide class name for supplementary view.")
-    }
-    let view = collectionView.dequeueReusableSupplementaryView(ofKind: kind,
-                                                               withReuseIdentifier: viewClass.reuseIdentifier(),
-                                                               for: indexPath)
-    if kind == UICollectionElementKindSectionHeader {
-      if currentViewModel.numberOfItemsIn(section: indexPath.section) == 0,
-          let headerView = view as? IOSchedCollectionViewHeaderCell {
-        headerView.date = nil
-        headerView.isHidden = true
-      } else {
-        view.isHidden = false
-      }
-    }
-    currentViewModel.populateSupplementaryView(view, forItemAt: indexPath)
-    return view
-  }
-
-  override func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
-    currentViewModel.didSelectItemAt(indexPath: indexPath)
   }
 
 }
@@ -658,17 +432,17 @@ extension ScheduleViewController: UIViewControllerPreviewingDelegate {
 
   func previewingContext(_ previewingContext: UIViewControllerPreviewing,
                          viewControllerForLocation location: CGPoint) -> UIViewController? {
-    guard tabBar.selectedItem != agendaTabBarItem else { return nil }
     if let indexPath = collectionView?.indexPathForItem(at: location), let cellAttributes = collectionView?.layoutAttributesForItem(at: indexPath) {
       // This will show the cell clearly and blur the rest of the screen for our peek.
       previewingContext.sourceRect = cellAttributes.frame
 
-      return currentViewModel.previewViewControllerForItemAt(indexPath: indexPath)
+      return scheduleViewModel.previewViewControllerForItemAt(indexPath: indexPath)
     }
     return nil
   }
 
-  func previewingContext(_ previewingContext: UIViewControllerPreviewing, commit viewControllerToCommit: UIViewController) {
+  func previewingContext(_ previewingContext: UIViewControllerPreviewing,
+                         commit viewControllerToCommit: UIViewController) {
     self.navigationController?.pushViewController(viewControllerToCommit, animated: true)
   }
 
@@ -681,13 +455,12 @@ extension ScheduleViewController {
   func registerForDynamicTypeUpdates() {
     NotificationCenter.default.addObserver(self,
                                            selector: #selector(dynamicTypeTextSizeDidChange(_:)),
-                                           name: .UIContentSizeCategoryDidChange,
+                                           name: UIContentSizeCategory.didChangeNotification,
                                            object: nil)
   }
 
   @objc func dynamicTypeTextSizeDidChange(_ sender: Any) {
     scheduleViewModel.invalidateHeights()
-    myIOViewModel.invalidateHeights()
     collectionView?.collectionViewLayout.invalidateLayout()
     collectionView?.reloadData()
   }

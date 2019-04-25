@@ -14,7 +14,6 @@
 //  limitations under the License.
 //
 
-import Foundation
 import MaterialComponents
 import SafariServices
 
@@ -22,7 +21,6 @@ class SpeakerDetailsCollectionViewMainInfoCell: MDCCollectionViewCell {
 
   private lazy var detailsLabel: UILabel = self.setupDetailsLabel()
   private lazy var twitterButton: MDCButton = self.setupTwitterButton()
-  private lazy var plusButton: MDCButton = self.setupPlusButton()
   private lazy var stackContainer: UIStackView = self.setupStackContainer()
   private lazy var spacerView: UIView = self.setupSpacerView()
 
@@ -51,13 +49,13 @@ class SpeakerDetailsCollectionViewMainInfoCell: MDCCollectionViewCell {
     let views = [
       "detailsLabel": detailsLabel,
       "stackContainer": stackContainer
-      ] as [String : Any]
+      ] as [String: Any]
 
     let metrics = [
       "topMargin": 20,
       "bottomMargin": 20,
       "leftMargin": 16,
-      "rightMargin": 16,
+      "rightMargin": 16
     ]
 
     var constraints =
@@ -99,24 +97,13 @@ class SpeakerDetailsCollectionViewMainInfoCell: MDCCollectionViewCell {
     return spacerView
   }
 
-  private func setupPlusButton() -> MDCButton {
-    let plusButton = MDCFlatButton()
-    plusButton.isUppercaseTitle = false
-    plusButton.translatesAutoresizingMaskIntoConstraints = false
-    plusButton.contentEdgeInsets = UIEdgeInsets(top: 10, left: 0, bottom: 10, right: 0)
-    plusButton.addTarget(self, action: #selector(plusTapped), for: .touchUpInside)
-    plusButton.setImage(UIImage(named:"ic_google_plus"), for:.normal)
-    plusButton.setContentHuggingPriority(UILayoutPriority.defaultHigh, for: .horizontal)
-    return plusButton
-  }
-
   private func setupTwitterButton() -> MDCButton {
     let twitterButton = MDCFlatButton()
     twitterButton.isUppercaseTitle = false
     twitterButton.translatesAutoresizingMaskIntoConstraints = false
     twitterButton.contentEdgeInsets = UIEdgeInsets(top: 10, left: 0, bottom: 10, right: 0)
     twitterButton.addTarget(self, action: #selector(twitterTapped), for: .touchUpInside)
-    twitterButton.setImage(UIImage(named:"ic_twitter"), for:.normal)
+    twitterButton.setImage(UIImage(named: "ic_twitter"), for: .normal)
     twitterButton.setContentHuggingPriority(UILayoutPriority.defaultHigh, for: .horizontal)
     return twitterButton
   }
@@ -125,14 +112,11 @@ class SpeakerDetailsCollectionViewMainInfoCell: MDCCollectionViewCell {
     viewModel?.twitterTapped()
   }
 
-  @objc func plusTapped() {
-    viewModel?.plusTapped()
-  }
-
   private func setupDetailsLabel() -> UILabel {
     let label = UILabel()
     label.translatesAutoresizingMaskIntoConstraints = false
-    label.font = MDCTypography.body1Font()
+    label.font = UIFont.mdc_preferredFont(forMaterialTextStyle: .body1)
+    label.enableAdjustFontForContentSizeCategory()
     label.textColor = MDCPalette.grey.tint800
     label.numberOfLines = 0
     return label
@@ -145,12 +129,8 @@ class SpeakerDetailsCollectionViewMainInfoCell: MDCCollectionViewCell {
       detailsLabel.text = viewModel.bio
       detailsLabel.setLineHeightMultiple(1.4)
 
-      if viewModel.twitterUrl != nil {
+      if viewModel.twitterURL != nil {
         stackContainer.insertArrangedSubview(twitterButton, at: 0)
-      }
-
-      if viewModel.plusOneUrl != nil {
-        stackContainer.insertArrangedSubview(plusButton, at: 0)
       }
 
       // make cell tappable for the twitter and plus url buttons

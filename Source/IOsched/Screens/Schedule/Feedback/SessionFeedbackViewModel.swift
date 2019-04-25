@@ -14,19 +14,17 @@
 //  limitations under the License.
 //
 
-import Domain
 import MaterialComponents
-import Platform
 
 final class SessionFeedbackViewModel {
 
   let sessionID: String
   let sessionTitle: String
-  let userState: WritableUserState
+  let userState: PersistentUserState
 
   private let feedbackService: FeedbackService
 
-  init(sessionID: String, title: String, userState: WritableUserState) {
+  init(sessionID: String, title: String, userState: PersistentUserState) {
     self.sessionID = sessionID
     sessionTitle = title
     self.userState = userState
@@ -53,31 +51,31 @@ final class SessionFeedbackViewModel {
         switch error {
 
         case .alreadySubmitted:
-          resultMessage.text = NSLocalizedString("Feedback already submitted", comment: "Text shown when user tries to submit feedback on the same session more than once")
+          resultMessage.text = NSLocalizedString("Feedback already submitted",
+              comment: "Text shown when user tries to submit feedback on the same session more than once")
           shouldPopController = true
 
         case .formNotComplete:
-          // This should never happen, since the client checks for form completeness before
-          // attempting any API calls.
-          resultMessage.text = NSLocalizedString("Feedback incomplete", comment: "Text shown when user tries to submit feedback before fully filling out the feedback form")
+          resultMessage.text = NSLocalizedString("Feedback incomplete",
+              comment: "Text shown when user tries to submit feedback before fully filling out the feedback form")
 
         case .userNotSignedIn:
           // This should be removed once the client supports feedback for signed-out users.
-          resultMessage.text = NSLocalizedString("Not signed-in", comment: "Text shown when user tries to submit feedback but is signed-out")
-
-        case .feedbackNotReceived:
-          resultMessage.text = NSLocalizedString("Feedback not received", comment: "Text shown if server does not receive feedback")
+          resultMessage.text = NSLocalizedString("Not signed-in",
+              comment: "Text shown when user tries to submit feedback but is signed-out")
 
         case .apiError:
           // Ignoring the error's contents here since it's mostly debug info not informative to the user.
           // Don't pop the controller here since a retry will probably succeed. Errors like timeout
           // and network change will fall into this category.
-          resultMessage.text = NSLocalizedString("Error submitting feedback", comment: "Text shown when user feedback submission has failed due to a server error")
+          resultMessage.text = NSLocalizedString("Error submitting feedback",
+              comment: "Text shown when user feedback submission has failed due to a server error")
         }
 
       } else {
         shouldPopController = true
-        resultMessage.text = NSLocalizedString("Feedback submitted", comment: "Text shown when user feedback submission has succeeded")
+        resultMessage.text = NSLocalizedString("Feedback submitted",
+            comment: "Text shown when user feedback submission has succeeded")
       }
 
       if shouldPopController {

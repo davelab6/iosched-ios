@@ -17,148 +17,169 @@
 import Foundation
 import MaterialComponents
 import UIKit
-import Domain
 import SafariServices
 
-typealias ScheduleFilterCompletedCallback = () -> Void
-
-protocol ScheduleNavigator: SignInNavigatable {
-  func navigateToScheduleTab()
+public protocol ScheduleNavigator {
   func navigateToURL(_ url: URL)
   func navigateToStart()
-  func navigateToDay(day: Int)
+  func navigateToDay(_ day: Int)
   func navigateToSchedule()
-  func navigateToSessionDetails(sessionId: String, popToRoot: Bool)
+  func navigate(to session: Session, popToRoot: Bool)
+  func navigateToSessionDetails(sessionID: String, popToRoot: Bool)
   func navigateToSpeakerDetails(speaker: Speaker, popToRoot: Bool)
-  func navigateToFeedback(sessionId: String, title: String)
-  func detailsViewController(for sessionId: String) -> UIViewController
+  func navigateToFeedback(sessionID: String, title: String)
+  func detailsViewController(for session: Session) -> UIViewController
   func speakerDetailsViewController(for speaker: Speaker) -> UIViewController
   func shareSessionDetails(items: [Any], sourceView: UIView?, sourceRect: CGRect?)
-  func navigateToFilter(viewModel: ScheduleFilterViewModel, callback: @escaping ScheduleFilterCompletedCallback)
+  func navigateToFilter(viewModel: ScheduleFilterViewModel, callback: @escaping () -> Void)
   func navigateToAccount()
   func navigateToMap(roomId: String?)
-  func showBookmarkToast(viewModel: ScheduleViewModel?, isBookmarked: Bool)
   func showCancellationDialog(title: String, message: String, _ completion: @escaping (_ confirmCancellation: Bool) -> Void)
-  func showReservationClashDialog()
+  func showReservationClashDialog(swapHandler: @escaping () -> Void)
+  func showMultiClashDialog()
 }
 
-final class DefaultScheduleNavigator: ScheduleNavigator {
+public final class DefaultScheduleNavigator: ScheduleNavigator {
   private enum DialogConstants {
     static let confirmCancellationOK = NSLocalizedString("Yes", comment: "Button title to confirm a cancellation action.")
     static let confirmCancellationCancel = NSLocalizedString("No", comment: "Button title to decline a cancellation action. Please avoid using phrases containing 'cancel' as they may be ambiguous.")
 
-    static let conflictTitle = NSLocalizedString("Time conflict", comment: "Conflict title")
-    static let conflictMessage = NSLocalizedString("You already have a reservation/waitlist request for this time. Only one reservation per time block is allowed; please cancel your previous request if you’d like to proceed.", comment: "Conflict message")
+    static let swapButtonTitle = NSLocalizedString(
+      "Swap reservation",
+      comment: "Button text for swapping or exchanging an existing reservation for a new one"
+    )
+    static let conflictMessageDismissText = NSLocalizedString("OK", comment: "Dismiss dialog button text")
+
+    static let conflictTitle = NSLocalizedString("Time conflict", comment: "Conflict dialog title")
+    static let conflictMessage = NSLocalizedString("You already have a reservation/waitlist request for this time. Only one reservation per time block is allowed.", comment: "Conflicting reservations message. The second sentence should explain that reservations for sessions/events that occur at the same time are not allowed.")
+
+    static let multiClashTitle = NSLocalizedString("Time conflict", comment: "Conflict dialog title")
+    static let multiClashMessage = NSLocalizedString("You have multiple conflicting reservations. Please remove all of your conflicting reservations to reserve this event.", comment: "Conflicting reservations message. The second sentence provides instructions on how to resolve the conflicting reservations.")
   }
 
   private let serviceLocator: ServiceLocator
   private let rootNavigator: RootNavigator
   private let navigationController: UINavigationController
+  private lazy var clashDetector =
+      ReservationClashDetector(sessions: serviceLocator.sessionsDataSource,
+                               reservations: serviceLocator.reservationDataSource)
 
-  init(serviceLocator: ServiceLocator, rootNavigator: RootNavigator, navigationController: UINavigationController) {
+  init(serviceLocator: ServiceLocator,
+       rootNavigator: RootNavigator,
+       navigationController: UINavigationController) {
     self.serviceLocator = serviceLocator
     self.rootNavigator = rootNavigator
     self.navigationController = navigationController
   }
 
-  func navigateToScheduleTab() {
-    rootNavigator.navigateToSchedule()
-  }
-
-  func navigateToStart() {
+  public func navigateToStart() {
     navigateToSchedule()
   }
 
-  func navigateToURL(_ url: URL) {
+  public func navigateToURL(_ url: URL) {
     navigationController.present(SFSafariViewController(url: url), animated: true, completion: nil)
   }
 
   lazy var scheduleViewController: ScheduleViewController = {
-    let viewModel = DefaultScheduleViewModel(conferenceDataSource: self.serviceLocator.conferenceDataSource,
-                                             bookmarkStore: self.serviceLocator.bookmarkStore,
-                                             reservationStore: self.serviceLocator.reservationStore,
-                                             userState: self.serviceLocator.userState,
-                                             rootNavigator: self.rootNavigator,
-                                             navigator: self)
-    let composedViewModel = ScheduleComposedViewModel(wrappedModel: viewModel, navigator: self)
-    let myIOViewModel = MyIOViewModel(conferenceDataSource: self.serviceLocator.conferenceDataSource,
-                                      bookmarkStore: self.serviceLocator.bookmarkStore,
-                                      reservationStore: self.serviceLocator.reservationStore,
-                                      userState: self.serviceLocator.userState,
-                                      rootNavigator: self.rootNavigator,
-                                      navigator: self)
-    let myIOComposedViewModel = MyIOComposedViewModel(wrappedModel: myIOViewModel, navigator: self)
-    return ScheduleViewController(viewModel: composedViewModel, myIOViewModel: myIOComposedViewModel)
+    let viewModel = DefaultSessionListViewModel(
+      sessionsDataSource: serviceLocator.sessionsDataSource,
+      bookmarkDataSource: serviceLocator.bookmarkDataSource,
+      reservationDataSource: serviceLocator.reservationDataSource,
+      navigator: self
+    )
+    let displayableViewModel = ScheduleDisplayableViewModel(wrappedModel: viewModel)
+    let searchController = SearchCollectionViewController(rootNavigator: rootNavigator,
+                                                          serviceLocator: serviceLocator)
+    searchController.scheduleNavigator = self
+    return ScheduleViewController(viewModel: displayableViewModel,
+                                  searchViewController: searchController)
   }()
 
-  func navigateToDay(day: Int) {
+  public func navigateToDay(_ day: Int) {
+    scheduleViewController.loadViewIfNeeded()
     scheduleViewController.selectDay(day: day)
   }
 
-  func navigateToSchedule() {
+  public func navigateToSchedule() {
     navigationController.pushViewController(scheduleViewController, animated: true)
   }
 
-  func navigateToSessionDetails(sessionId: String, popToRoot: Bool = false) {
-    let viewModel = SessionDetailsViewModel(conferenceDataSource: serviceLocator.conferenceDataSource,
-                                            bookmarkStore: serviceLocator.bookmarkStore,
-                                            reservationStore: serviceLocator.reservationStore,
-                                            userState: serviceLocator.userState,
-                                            navigator: self,
-                                            sessionId: sessionId)
+  public func navigateToSessionDetails(sessionID: String, popToRoot: Bool = false) {
+    guard let session = serviceLocator.sessionsDataSource[sessionID] else {
+      print("Session not found in data source: \(sessionID)")
+      return
+    }
+    navigate(to: session)
+  }
+
+  public func navigate(to session: Session, popToRoot: Bool = false) {
+    let viewModel = SessionDetailsViewModel(
+      session: session,
+      bookmarkDataSource: serviceLocator.bookmarkDataSource,
+      reservationDataSource: serviceLocator.reservationDataSource,
+      clashDetector: clashDetector,
+      userState: serviceLocator.userState,
+      navigator: self
+    )
     let viewController = SessionDetailsViewController(viewModel: viewModel)
 
     // needed for I'm feeling lucky and deep linking
-    if (popToRoot) {
+    if popToRoot {
       navigationController.popToRootViewController(animated: false)
     }
     navigationController.pushViewController(viewController, animated: true)
   }
 
-  func navigateToSpeakerDetails(speaker: Speaker, popToRoot: Bool = false) {
-    let viewModel = SpeakerDetailsViewModel(conferenceDataSource: serviceLocator.conferenceDataSource,
-                                            bookmarkStore: serviceLocator.bookmarkStore,
-                                            reservationStore: serviceLocator.reservationStore,
-                                            navigator: self,
-                                            speaker: speaker)
+  public func navigateToSpeakerDetails(speaker: Speaker, popToRoot: Bool = false) {
+    let viewModel = SpeakerDetailsViewModel(
+      sessionsDataSource: serviceLocator.sessionsDataSource,
+      bookmarkDataSource: serviceLocator.bookmarkDataSource,
+      reservationDataSource: serviceLocator.reservationDataSource,
+      navigator: self,
+      speaker: speaker
+    )
     let viewController = SpeakerDetailsViewController(viewModel: viewModel)
 
     // needed for I'm feeling lucky and deep linking
-    if (popToRoot) {
+    if popToRoot {
       navigationController.popToRootViewController(animated: false)
-    }    
+    }
     navigationController.pushViewController(viewController, animated: true)
   }
 
-  func navigateToFeedback(sessionId: String, title: String) {
-    let feedbackController = SessionFeedbackViewController(sessionID: sessionId,
+  public func navigateToFeedback(sessionID: String, title: String) {
+    let feedbackController = SessionFeedbackViewController(sessionID: sessionID,
                                                            title: title,
                                                            userState: serviceLocator.userState)
     navigationController.present(feedbackController, animated: true, completion: nil)
   }
 
-  func detailsViewController(for sessionId: String) -> UIViewController {
-    let viewModel = SessionDetailsViewModel(conferenceDataSource: serviceLocator.conferenceDataSource,
-                                            bookmarkStore: serviceLocator.bookmarkStore,
-                                            reservationStore: serviceLocator.reservationStore,
-                                            userState: serviceLocator.userState,
-                                            navigator: self,
-                                            sessionId: sessionId)
+  public func detailsViewController(for session: Session) -> UIViewController {
+    let viewModel = SessionDetailsViewModel(
+      session: session,
+      bookmarkDataSource: serviceLocator.bookmarkDataSource,
+      reservationDataSource: serviceLocator.reservationDataSource,
+      clashDetector: clashDetector,
+      userState: serviceLocator.userState,
+      navigator: self
+    )
     let viewController = SessionDetailsViewController(viewModel: viewModel)
     return viewController
   }
 
-  func speakerDetailsViewController(for speaker: Speaker) -> UIViewController {
-    let viewModel = SpeakerDetailsViewModel(conferenceDataSource: serviceLocator.conferenceDataSource,
-                                            bookmarkStore: serviceLocator.bookmarkStore,
-                                            reservationStore: serviceLocator.reservationStore,
-                                            navigator: self,
-                                            speaker: speaker)
+  public func speakerDetailsViewController(for speaker: Speaker) -> UIViewController {
+    let viewModel = SpeakerDetailsViewModel(
+      sessionsDataSource: serviceLocator.sessionsDataSource,
+      bookmarkDataSource: serviceLocator.bookmarkDataSource,
+      reservationDataSource: serviceLocator.reservationDataSource,
+      navigator: self,
+      speaker: speaker
+    )
     let viewController = SpeakerDetailsViewController(viewModel: viewModel)
     return viewController
   }
 
-  func shareSessionDetails(items: [Any], sourceView: UIView? = nil, sourceRect: CGRect? = nil) {
+  public func shareSessionDetails(items: [Any], sourceView: UIView? = nil, sourceRect: CGRect? = nil) {
     let activityViewController = UIActivityViewController(activityItems: items, applicationActivities: nil)
     if let view = sourceView, let rect = sourceRect {
       activityViewController.popoverPresentationController?.sourceView = view
@@ -170,32 +191,29 @@ final class DefaultScheduleNavigator: ScheduleNavigator {
     navigationController.present(activityViewController, animated: true, completion: {})
   }
 
-  func navigateToFilter(viewModel: ScheduleFilterViewModel, callback: @escaping ScheduleFilterCompletedCallback) {
+  public func navigateToFilter(viewModel: ScheduleFilterViewModel, callback: @escaping () -> Void) {
     let filterViewController = ScheduleFilterViewController(viewModel: viewModel, doneCallback: {
-      self.navigationController.dismiss(animated: true, completion: {
-        callback()
-      })
+      callback()
+      self.navigationController.dismiss(animated: true, completion: nil)
     })
     navigationController.present(filterViewController, animated: true, completion: nil)
   }
 
-  func navigateToAccount() {
-    let viewModel = UserAccountInfoViewModel(userState: serviceLocator.userState, navigator: self)
+  public func navigateToAccount() {
+    let viewModel = UserAccountInfoViewModel(userState: serviceLocator.userState)
     let settingsViewModel = SettingsViewModel(userState: self.serviceLocator.userState)
     let viewController = UserAccountInfoViewController(viewModel: viewModel, settingsViewModel: settingsViewModel)
     navigationController.present(viewController, animated: true, completion: nil)
   }
 
-  func navigateToMap(roomId: String?) {
+  public func navigateToMap(roomId: String?) {
     rootNavigator.navigateToMap(roomId: roomId)
   }
 
-  func showBookmarkToast(viewModel: ScheduleViewModel?, isBookmarked: Bool) {
-  }
-
-  func showCancellationDialog(title: String, message: String, _ completion: @escaping (_ confirmCancellation: Bool) -> Void) {
+  public func showCancellationDialog(title: String, message: String, _ completion: @escaping (_ confirmCancellation: Bool) -> Void) {
     let alertController = MDCAlertController(title: title,
                                              message: message)
+    styleAlertController(alertController)
     let actionOK = MDCAlertAction(title: DialogConstants.confirmCancellationOK) { (_) in
       completion(true)
     }
@@ -210,15 +228,40 @@ final class DefaultScheduleNavigator: ScheduleNavigator {
     navigationController.present(alertController, animated: true, completion: nil)
   }
 
-  func showReservationClashDialog() {
-    let alertController = MDCAlertController(title: DialogConstants.conflictTitle, message: DialogConstants.conflictMessage)
-
-    let actionOK = MDCAlertAction(title: DialogConstants.confirmCancellationOK) { (_) in
+  public func showReservationClashDialog(swapHandler: @escaping () -> Void) {
+    let alertController = MDCAlertController(title: DialogConstants.conflictTitle,
+                                             message: DialogConstants.conflictMessage)
+    styleAlertController(alertController)
+    let actionOK = MDCAlertAction(title: DialogConstants.conflictMessageDismissText) { (_) in }
+    let swapAction = MDCAlertAction(title: DialogConstants.swapButtonTitle) { _ in
+      swapHandler()
     }
 
     alertController.addAction(actionOK)
-
+    alertController.addAction(swapAction)
     navigationController.present(alertController, animated: true, completion: nil)
+  }
+
+  public func showMultiClashDialog() {
+    let alertController = MDCAlertController(title: DialogConstants.multiClashTitle,
+                                             message: DialogConstants.multiClashMessage)
+    styleAlertController(alertController)
+    let actionOK = MDCAlertAction(title: DialogConstants.conflictMessageDismissText) { (_) in }
+
+    alertController.addAction(actionOK)
+    navigationController.present(alertController, animated: true, completion: nil)
+  }
+
+  private func styleAlertController(_ controller: MDCAlertController) {
+    controller.cornerRadius = 8
+    controller.titleFont = ProductSans.regular.style(.callout)
+    controller.titleColor = UIColor(red: 32 / 255, green: 33 / 255, blue: 36 / 255, alpha: 1)
+    controller.messageFont = UIFont.preferredFont(forTextStyle: .footnote)
+    controller.messageColor = UIColor(red: 65 / 255, green: 69 / 255, blue: 73 / 255, alpha: 1)
+    controller.buttonFont = ProductSans.regular.style(.body)
+    controller.mdc_adjustsFontForContentSizeCategory = true
+    controller.buttonTitleColor =
+        UIColor(red: 26 / 255, green: 115 / 255, blue: 232 / 255, alpha: 1)
   }
 
 }

@@ -23,21 +23,24 @@ class EventInfoCollectionViewCell: MDCCollectionViewCell {
     static let headerHeight: CGFloat = 200
 
     // swiftlint:disable large_tuple
-    static let headerInsets: (top: CGFloat, bottom: CGFloat, left: CGFloat, right: CGFloat) = (
-      top: 54, bottom: 18, left: 16, right: 16
+    static let headerInsets: (left: CGFloat, right: CGFloat) = (
+      left: 16, right: 16
     )
     // swiftlint:enable large_tuple
 
+    static let titleTopPadding: CGFloat = 16
     static let titleLabelFont = UIFont.preferredFont(forTextStyle: .title1)
 
     static let titleTextColor = UIColor(red: 74 / 255, green: 74 / 255, blue: 74 / 255, alpha: 1)
 
     static let titleLabelTopSpacing: CGFloat = 14
 
-    static let summaryLabelFont = { () -> UIFont in return UIFont.preferredFont(forTextStyle: .body) }
+    static let summaryLabelFont = { () -> UIFont in
+      return UIFont.preferredFont(forTextStyle: .body)
+    }
 
-    static let summaryLabelTopSpacing: CGFloat = 34
-    static let summaryLabelBottomSpacing: CGFloat = 80
+    static let summaryLabelTopSpacing: CGFloat = 16
+    static let summaryLabelBottomSpacing: CGFloat = 102
     static let summaryTextColor = UIColor(red: 66 / 255, green: 66 / 255, blue: 66 / 255, alpha: 1)
     static let summaryParagraphStyle = { () -> NSMutableParagraphStyle in
       let paragraphStyle = NSMutableParagraphStyle()
@@ -45,14 +48,22 @@ class EventInfoCollectionViewCell: MDCCollectionViewCell {
       return paragraphStyle
     }()
 
-    static let viewSessionsText = "View sessions"
-    static let viewMapText = "View map"
-    static let buttonTextColor = UIColor(red: 87 / 255, green: 117 / 255, blue: 244 / 255, alpha: 1)
+    static let viewSessionsText = NSLocalizedString("View sessions",
+                                                    comment: "Button text to open the schedule view")
+    static let viewMapText = NSLocalizedString("View map",
+                                               comment: "Button text to open the map view")
+    static let buttonTextColor = UIColor(red: 26 / 255, green: 115 / 255, blue: 232 / 255, alpha: 1)
   }
 
   private let titleImageView = UIImageView(frame: CGRect(x: 0, y: 0, width: 24, height: 24))
   private let titleLabel = UILabel()
-  private let headerBackgroundView = UIView()
+  private let headerBackgroundView: UIImageView = {
+    let imageView = UIImageView()
+    imageView.translatesAutoresizingMaskIntoConstraints = false
+    imageView.clipsToBounds = true
+    imageView.contentMode = .scaleAspectFill
+    return imageView
+  }()
 
   // MARK: - Public
 
@@ -69,12 +80,11 @@ class EventInfoCollectionViewCell: MDCCollectionViewCell {
     setupSummaryLabel()
     setupConstraints()
     setupButtons()
-  }
 
-  var titleBackgroundColor = UIColor.clear {
-    didSet {
-      headerBackgroundView.backgroundColor = UIColor(patternImage: UIImage(named: "background")!)
-    }
+    contentView.layer.cornerRadius = 8
+    contentView.layer.borderColor = UIColor(hex: 0xdadce0).cgColor
+    contentView.layer.borderWidth = 1
+    contentView.clipsToBounds = true
   }
 
   var summary: String? {
@@ -88,7 +98,7 @@ class EventInfoCollectionViewCell: MDCCollectionViewCell {
       }
 
       let attributed = NSMutableAttributedString(string: string)
-      attributed.addAttribute(NSAttributedStringKey.paragraphStyle,
+      attributed.addAttribute(NSAttributedString.Key.paragraphStyle,
                               value: Constants.summaryParagraphStyle,
                               range: NSRange(location: 0, length: attributed.length))
       summaryLabel.attributedText = attributed
@@ -106,10 +116,10 @@ class EventInfoCollectionViewCell: MDCCollectionViewCell {
 
   var titleIcon: UIImage? {
     get {
-      return titleImageView.image
+      return headerBackgroundView.image
     }
     set {
-      titleImageView.image = newValue
+      headerBackgroundView.image = newValue
     }
   }
 
@@ -121,7 +131,7 @@ class EventInfoCollectionViewCell: MDCCollectionViewCell {
   fileprivate let viewMapButton = MDCFlatButton()
 
   private static func boundingRect(forText text: String,
-                                   attributes: [NSAttributedStringKey: Any]? = nil,
+                                   attributes: [NSAttributedString.Key: Any]? = nil,
                                    maxWidth: CGFloat) -> CGRect {
     let rect = text.boundingRect(with: CGSize(width: maxWidth, height: CGFloat.greatestFiniteMagnitude),
                                  options: [.usesLineFragmentOrigin, .usesFontLeading],
@@ -130,14 +140,22 @@ class EventInfoCollectionViewCell: MDCCollectionViewCell {
     return rect
   }
 
-  static func minimumHeight(summary: String, maxWidth: CGFloat) -> CGFloat {
-    return Constants.headerHeight + Constants.summaryLabelTopSpacing
-        + self.boundingRect(forText: summary,
-                            attributes: [
-                              NSAttributedStringKey.font: Constants.summaryLabelFont(),
-                              NSAttributedStringKey.paragraphStyle: Constants.summaryParagraphStyle
-                            ],
-                            maxWidth: maxWidth - Constants.headerInsets.left - Constants.headerInsets.right).size.height
+  static func minimumHeight(title: String, summary: String, maxWidth: CGFloat) -> CGFloat {
+    let effectiveMaxWidth = maxWidth - Constants.headerInsets.left - Constants.headerInsets.right
+    let summaryHeight = boundingRect(forText: summary,
+                                     attributes: [
+                                      NSAttributedString.Key.font: Constants.summaryLabelFont(),
+                                      NSAttributedString.Key.paragraphStyle: Constants.summaryParagraphStyle
+      ],
+                                     maxWidth: effectiveMaxWidth).size.height
+    let titleHeight = boundingRect(forText: title,
+                                   attributes: [NSAttributedString.Key.font: Constants.titleLabelFont],
+                                   maxWidth: effectiveMaxWidth).size.height
+    return Constants.headerHeight
+        + Constants.titleTopPadding
+        + titleHeight
+        + Constants.summaryLabelTopSpacing
+        + summaryHeight
         + Constants.summaryLabelBottomSpacing
   }
 
@@ -150,6 +168,7 @@ class EventInfoCollectionViewCell: MDCCollectionViewCell {
     titleLabel.lineBreakMode = .byWordWrapping
     titleLabel.font = Constants.titleLabelFont
     titleLabel.textColor = Constants.titleTextColor
+    titleLabel.enableAdjustFontForContentSizeCategory()
     titleLabel.translatesAutoresizingMaskIntoConstraints = false
   }
 
@@ -245,12 +264,12 @@ class EventInfoCollectionViewCell: MDCCollectionViewCell {
                                           constant: -45))
     // title label bottom
     constraints.append(NSLayoutConstraint(item: titleLabel,
-                                          attribute: .bottom,
+                                          attribute: .top,
                                           relatedBy: .equal,
                                           toItem: headerBackgroundView,
                                           attribute: .bottom,
                                           multiplier: 1,
-                                          constant: -20))
+                                          constant: Constants.titleTopPadding))
     // title label left
     constraints.append(NSLayoutConstraint(item: titleLabel,
                                           attribute: .left,
@@ -263,18 +282,18 @@ class EventInfoCollectionViewCell: MDCCollectionViewCell {
     constraints.append(NSLayoutConstraint(item: titleLabel,
                                           attribute: .right,
                                           relatedBy: .equal,
-                                          toItem: titleImageView,
-                                          attribute: .left,
+                                          toItem: contentView,
+                                          attribute: .right,
                                           multiplier: 1,
-                                          constant: 0))
+                                          constant: -Constants.headerInsets.right))
     // summary label top
     constraints.append(NSLayoutConstraint(item: summaryLabel,
                                           attribute: .top,
                                           relatedBy: .equal,
-                                          toItem: headerBackgroundView,
+                                          toItem: titleLabel,
                                           attribute: .bottom,
                                           multiplier: 1,
-                                          constant: 32))
+                                          constant: Constants.summaryLabelTopSpacing))
     // summary label left
     constraints.append(NSLayoutConstraint(item: summaryLabel,
                                           attribute: .left,
@@ -306,7 +325,7 @@ class EventInfoCollectionViewCell: MDCCollectionViewCell {
                                           toItem: contentView,
                                           attribute: .bottom,
                                           multiplier: 1,
-                                          constant: -32))
+                                          constant: -16))
     // view sessions button right
     constraints.append(NSLayoutConstraint(item: viewSessionsButton,
                                           attribute: .right,
@@ -322,7 +341,7 @@ class EventInfoCollectionViewCell: MDCCollectionViewCell {
                                           toItem: contentView,
                                           attribute: .bottom,
                                           multiplier: 1,
-                                          constant: -32))
+                                          constant: -16))
 
     contentView.addConstraints(constraints)
   }
@@ -363,13 +382,11 @@ extension EventInfoCollectionViewCell {
     switch button {
 
     case viewSessionsButton:
-      Application.sharedInstance.tabBarController.selectedViewController =
-          Application.sharedInstance.scheduleViewController
+      Application.sharedInstance.rootNavigator.navigateToSchedule()
       action = "view sessions"
 
     case viewMapButton:
-      Application.sharedInstance.tabBarController.selectedViewController =
-          Application.sharedInstance.mapViewController
+      Application.sharedInstance.rootNavigator.navigateToMap(roomId: nil)
       action = "view maps"
 
     case _:

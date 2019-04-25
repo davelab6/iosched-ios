@@ -14,29 +14,47 @@
 //  limitations under the License.
 //
 
-import Foundation
+import Firebase
 
-// TODO(morganchen): update DefaultWritableUserState to make direct use of this
 extension UserDefaults {
 
-  private enum SettingsConstants {
+  enum Settings {
     static let notificationsEnabledKey = "com.google.iosched.isNotificationsEnabled"
-    static let eventsInPacificTimeKey  = "com.google.iosched.isEventsInPacificTime"
+    static let eventsInPacificTimeKey  = "com.google.iosched.shouldDisplayEventsInPDT"
     static let analyticsEnabledKey     = "com.google.iosched.isAnalyticsEnabled"
-    static let bookmarkNotificationSuppressedKey = "com.google.iosched.isBookmarkSuppressed"
-    static let unbookmarkNotificationSuppressedKey = "com.google.iosched.isUnbookmarkSuppressed"
   }
 
-  var isEventsInPacificTime: Bool {
-    return bool(forKey: SettingsConstants.eventsInPacificTimeKey)
+  enum Onboarding {
+    static let onboardingCompleted = "com.google.iosched.onboardingCompleted"
   }
 
-  func setEventsInPacificTime(_ value: Bool) {
-    set(value, forKey: SettingsConstants.eventsInPacificTimeKey)
+  var shouldDisplayEventsInPDT: Bool {
+    return bool(forKey: Settings.eventsInPacificTimeKey)
+  }
+
+  func setShouldDisplayEventsInPDT(_ value: Bool) {
+    set(value, forKey: Settings.eventsInPacificTimeKey)
 
     NotificationCenter.default.post(name: .timezoneUpdate,
                                     object: nil,
                                     userInfo: [:])
+  }
+
+  var isNotificationsEnabled: Bool {
+    return bool(forKey: UserDefaults.Settings.notificationsEnabledKey)
+  }
+
+  func setNotificationsEnabled(_ value: Bool) {
+    set(value, forKey: UserDefaults.Settings.notificationsEnabledKey)
+  }
+
+  var isAnalyticsEnabled: Bool {
+    return bool(forKey: UserDefaults.Settings.analyticsEnabledKey)
+  }
+
+  func setAnalyticsEnabled(_ value: Bool) {
+    set(value, forKey: UserDefaults.Settings.analyticsEnabledKey)
+    Analytics.setAnalyticsCollectionEnabled(value)
   }
 
 }

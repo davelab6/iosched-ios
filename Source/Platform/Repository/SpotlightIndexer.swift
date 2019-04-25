@@ -14,10 +14,8 @@
 //  limitations under the License.
 //
 
-import Foundation
 import CoreSpotlight
 import MobileCoreServices
-import Domain
 import AlamofireImage
 
 public enum IndexConstants: String {
@@ -26,12 +24,10 @@ public enum IndexConstants: String {
 }
 
 class SpotlightIndexer {
-  private let sessionsRepository: SessionsRepository
-  private let speakersRepository: SpeakersRepository
+  private let sessionsRepository: LazyReadonlySessionsDataSource
 
-  init(sessionsRepository: SessionsRepository, speakersRepository: SpeakersRepository) {
+  init(sessionsRepository: LazyReadonlySessionsDataSource) {
     self.sessionsRepository = sessionsRepository
-    self.speakersRepository = speakersRepository
   }
 
   func updateIndex() {
@@ -45,11 +41,13 @@ class SpotlightIndexer {
         let attributeSet = CSSearchableItemAttributeSet(itemContentType: kUTTypeItem as String)
         attributeSet.title = session.title
         attributeSet.contentDescription = session.detail
-        return CSSearchableItem(uniqueIdentifier: "\(IndexConstants.sessionDomainIdentifier.rawValue)/\(session.id)",
-                                domainIdentifier: IndexConstants.sessionDomainIdentifier.rawValue,
-                                attributeSet: attributeSet)
+        return CSSearchableItem(
+          uniqueIdentifier: "\(IndexConstants.sessionDomainIdentifier.rawValue)/\(session.id)",
+          domainIdentifier: IndexConstants.sessionDomainIdentifier.rawValue,
+          attributeSet: attributeSet
+        )
       }
-      self.rebuildIndex(for: IndexConstants.sessionDomainIdentifier.rawValue, with: indexItems)
+      RebuildSpotlightIndex(for: IndexConstants.sessionDomainIdentifier.rawValue, with: indexItems)
     }
   }
 
@@ -68,47 +66,56 @@ class SpotlightIndexer {
     )
   }()
 
+  var indexedSpeakers: Set<Speaker> = []
+
   func indexSpeakers() {
+    let speakers = Set(sessionsRepository.sessions.flatMap { $0.speakers })
+    // Indexing speakers requires fetching and creating images, which is expensive.
+    if speakers == indexedSpeakers { return }
+    indexedSpeakers = speakers
     DispatchQueue.global().async {
-      let indexItems = self.speakersRepository.speakers.map { speaker -> CSSearchableItem in
-        let attributeSet = CSSearchableItemAttributeSet(itemContentType: kUTTypeItem as String)
-        attributeSet.title = speaker.name
-        attributeSet.contentDescription = speaker.bio
+      let indexItems = speakers.map { speaker -> CSSearchableItem in
+        autoreleasepool {
+          let attributeSet = CSSearchableItemAttributeSet(itemContentType: kUTTypeItem as String)
+          attributeSet.title = speaker.name
+          attributeSet.contentDescription = speaker.bio
 
-        if let url = speaker.thumbnailUrl {
-          if let data = try? Data(contentsOf: url) {
-            let image = UIImage(data: data, scale: UIScreen.main.scale)!
-
-            let filteredImage = self.imageFilter.filter(image)
-            let dataFiltered = UIImagePNGRepresentation(filteredImage)
-
-            attributeSet.thumbnailData = dataFiltered
+          if let url = speaker.thumbnailURL {
+            if let data = try? Data(contentsOf: url) {
+              attributeSet.thumbnailData = data
+            }
           }
 
+          return CSSearchableItem(
+            uniqueIdentifier: "\(IndexConstants.speakerDomainIdentifier.rawValue)/\(speaker.id)",
+            domainIdentifier: IndexConstants.speakerDomainIdentifier.rawValue,
+            attributeSet: attributeSet
+          )
         }
-
-        return CSSearchableItem(uniqueIdentifier: "\(IndexConstants.speakerDomainIdentifier.rawValue)/\(speaker.id)",
-                                domainIdentifier: IndexConstants.speakerDomainIdentifier.rawValue,
-                                attributeSet: attributeSet)
       }
-      self.rebuildIndex(for: IndexConstants.speakerDomainIdentifier.rawValue, with: indexItems)
+      RebuildSpotlightIndex(for: IndexConstants.speakerDomainIdentifier.rawValue,
+                            with: indexItems)
     }
   }
 
-  func rebuildIndex(for domainIdentifier: String, with indexItems: [CSSearchableItem]) {
-    // let's delete all session index items first, as we don't know if the dataset contains any deletions
-    CSSearchableIndex.default().deleteSearchableItems(withDomainIdentifiers: [domainIdentifier]) { error in
-      if let error = error {
-        print("While trying to delete index items from the index, the following error ocurred: \(error.localizedDescription)")
-      } else {
-        print("Successfully deleted index items.")
+}
 
-        CSSearchableIndex.default().indexSearchableItems(indexItems) { error in
-          if let error = error {
-            print("While trying to index items, the following error ocurred: \(error.localizedDescription)")
-          } else {
-            print("Successfully indexed \(indexItems.count) items.")
-          }
+/// Rebuilds the spotlight index for a given domain identifier and index items.
+/// This is defined as a standalone function to limit its access to class state.
+fileprivate func RebuildSpotlightIndex(for domainIdentifier: String,
+                                       with indexItems: [CSSearchableItem]) {
+  // delete all session index items first, as we don't know if the dataset contains any deletions
+  CSSearchableIndex.default().deleteSearchableItems(withDomainIdentifiers: [domainIdentifier]) { error in
+    if let error = error {
+      print("While trying to delete index items from the index, the following error ocurred: \(error.localizedDescription)")
+    } else {
+      print("Successfully deleted index items.")
+
+      CSSearchableIndex.default().indexSearchableItems(indexItems) { error in
+        if let error = error {
+          print("While trying to index items, the following error ocurred: \(error.localizedDescription)")
+        } else {
+          print("Successfully indexed \(indexItems.count) items.")
         }
       }
     }

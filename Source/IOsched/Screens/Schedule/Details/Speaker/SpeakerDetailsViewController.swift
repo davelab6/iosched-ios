@@ -14,7 +14,6 @@
 //  limitations under the License.
 //
 
-import Foundation
 import MaterialComponents
 
 class SpeakerDetailsViewController: BaseCollectionViewController {
@@ -24,6 +23,14 @@ class SpeakerDetailsViewController: BaseCollectionViewController {
   lazy var measureSpeakerCell: SpeakerDetailsCollectionViewSpeakerCell = self.setupMeasureSpeakerCell()
   lazy var measureMainInfoCell: SpeakerDetailsCollectionViewMainInfoCell = self.setupMeasureMainInfoCell()
   lazy var measureEventInfoCell: ScheduleViewCollectionViewCell = self.setupMeasureEventInfoCell()
+
+  lazy var headerImageView: UIImageView = {
+    let imageView = UIImageView()
+    imageView.translatesAutoresizingMaskIntoConstraints = false
+    imageView.contentMode = .scaleAspectFill
+    imageView.clipsToBounds = true
+    return imageView
+  }()
 
   required init(viewModel: SpeakerDetailsViewModel) {
     self.viewModel = viewModel
@@ -38,7 +45,36 @@ class SpeakerDetailsViewController: BaseCollectionViewController {
 
   override func viewDidLoad() {
     super.viewDidLoad()
+    collectionView.backgroundColor = .white
     registerForViewUpdates()
+  }
+
+  override func setupAppBar() -> MDCAppBarViewController {
+    let appBar = super.setupAppBar()
+
+    appBar.headerView.insertSubview(headerImageView, at: 0)
+
+    let constraints = [
+      NSLayoutConstraint(item: headerImageView, attribute: .top,
+                         relatedBy: .equal,
+                         toItem: appBar.headerView, attribute: .top,
+                         multiplier: 1, constant: 0),
+      NSLayoutConstraint(item: headerImageView, attribute: .left,
+                         relatedBy: .equal,
+                         toItem: appBar.headerView, attribute: .left,
+                         multiplier: 1, constant: 0),
+      NSLayoutConstraint(item: headerImageView, attribute: .right,
+                         relatedBy: .equal,
+                         toItem: appBar.headerView, attribute: .right,
+                         multiplier: 1, constant: 0),
+      NSLayoutConstraint(item: headerImageView, attribute: .bottom,
+                         relatedBy: .equal,
+                         toItem: appBar.headerView, attribute: .bottom,
+                         multiplier: 1, constant: 0)
+    ]
+    appBar.headerView.addConstraints(constraints)
+
+    return appBar
   }
 
 // MARK: - View setup
@@ -55,6 +91,7 @@ class SpeakerDetailsViewController: BaseCollectionViewController {
     appBar.navigationBar.tintColor = MDCPalette.grey.tint800
 
     setup3DTouch()
+    headerImageView.image = viewModel.headerImageForSpeaker()
   }
 
   func registerForViewUpdates() {
@@ -77,15 +114,10 @@ class SpeakerDetailsViewController: BaseCollectionViewController {
     collectionView?.register(ScheduleViewCollectionViewCell.self)
     collectionView?.register(SpeakerDetailsCollectionViewSpeakerCell.self)
     collectionView?.register(SpeakerDetailsCollectionViewMainInfoCell.self)
-    collectionView?.register(MDCCollectionViewTextCell.self, forSupplementaryViewOfKind: UICollectionElementKindSectionHeader)
+    collectionView?.register(MDCCollectionViewTextCell.self, forSupplementaryViewOfKind: UICollectionView.elementKindSectionHeader)
 
     styler.cellStyle = .default
     styler.shouldAnimateCellsOnAppearance = false
-  }
-
-  @objc override func setupAppBar() -> MDCAppBar {
-    let appBar = super.setupAppBar()
-    return appBar
   }
 
   func setupMeasureSpeakerCell() -> SpeakerDetailsCollectionViewSpeakerCell {
@@ -104,9 +136,9 @@ class SpeakerDetailsViewController: BaseCollectionViewController {
 
   func setupMeasureEventInfoCell() -> ScheduleViewCollectionViewCell {
     return ScheduleViewCollectionViewCell(frame: CGRect(x: 0,
-                                                                  y: 0,
-                                                                  width: self.view.frame.width,
-                                                                  height: self.view.frame.height))
+                                                        y: 0,
+                                                        width: self.view.frame.width,
+                                                        height: self.view.frame.height))
   }
 
 // MARK: - ViewControllerStylable
@@ -137,12 +169,12 @@ class SpeakerDetailsViewController: BaseCollectionViewController {
 
 }
 
-
 // MARK: - UICollectionView Layout
 
 extension SpeakerDetailsViewController {
 
-  override func collectionView(_ collectionView: UICollectionView, cellHeightAt indexPath: IndexPath) -> CGFloat {
+  override func collectionView(_ collectionView: UICollectionView,
+                               cellHeightAt indexPath: IndexPath) -> CGFloat {
     let measureCell: MDCCollectionViewCell = {
       if indexPath.section == 0 {
         if indexPath.row == 0 {
@@ -156,15 +188,29 @@ extension SpeakerDetailsViewController {
         return measureEventInfoCell
       }
   }()
-
     populateCell(cell: measureCell, forItemAt: indexPath)
-    return measureCell.systemLayoutSizeFitting(UILayoutFittingCompressedSize).height
+    if indexPath.section != 0 {
+      return measureEventInfoCell.heightForContents(maxWidth: collectionView.frame.size.width - 24)
+    }
+    return measureCell.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize).height
   }
 }
 
 // MARK: - UICollectionView DataSource
 
 extension SpeakerDetailsViewController {
+
+  override func collectionView(_ collectionView: UICollectionView,
+                               layout collectionViewLayout: UICollectionViewLayout,
+                               insetForSectionAt section: Int) -> UIEdgeInsets {
+    if section == 1 {
+      return UIEdgeInsets(top: 0, left: 12, bottom: 0, right: 12)
+    } else {
+      return super.collectionView(collectionView,
+                                  layout: collectionViewLayout,
+                                  insetForSectionAt: section)
+    }
+  }
 
   override func collectionView(_ collectionView: UICollectionView,
                                layout collectionViewLayout: UICollectionViewLayout,
@@ -191,9 +237,9 @@ extension SpeakerDetailsViewController {
     }
 
     if let cell = cell as? ScheduleViewCollectionViewCell {
-      cell.viewModel  = viewModel.relatedSessionAtIndex(indexPath.row)
-      cell.onBookmarkTapped { sessionId in
-        self.viewModel.toggleBookmark(sessionId: sessionId)
+      cell.viewModel = viewModel.relatedSessionAtIndex(indexPath.row)
+      cell.onBookmarkTapped { sessionID in
+        self.viewModel.toggleBookmark(sessionID: sessionID)
       }
     }
   }
@@ -213,7 +259,7 @@ extension SpeakerDetailsViewController {
   }
 
   override func collectionView(_ collectionView: UICollectionView, shouldHighlightItemAt indexPath: IndexPath) -> Bool {
-    return (((collectionView.cellForItem(at: indexPath) as? ScheduleViewCollectionViewCell) != nil))
+    return (collectionView.cellForItem(at: indexPath) as? ScheduleViewCollectionViewCell) != nil
   }
 
   override func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {

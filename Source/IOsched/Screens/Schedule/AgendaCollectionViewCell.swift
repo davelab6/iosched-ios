@@ -18,10 +18,6 @@ import MaterialComponents
 
 class AgendaCollectionViewCell: MDCCollectionViewCell {
 
-  public static var cellHeight: CGFloat {
-    return 72
-  }
-
   private static let dateIntervalFormatter: DateIntervalFormatter = {
     let formatter = DateIntervalFormatter()
     formatter.timeZone = TimeZone.userTimeZone()
@@ -59,8 +55,10 @@ class AgendaCollectionViewCell: MDCCollectionViewCell {
     let label = UILabel()
     label.translatesAutoresizingMaskIntoConstraints = false
     label.textColor = UIColor(hex: "#202124")
-    label.numberOfLines = 1
+    label.numberOfLines = 0
+    label.lineBreakMode = .byWordWrapping
     label.font = UIFont.preferredFont(forTextStyle: .subheadline)
+    label.enableAdjustFontForContentSizeCategory()
     return label
   }
 
@@ -88,24 +86,44 @@ class AgendaCollectionViewCell: MDCCollectionViewCell {
     return view
   }
 
+  static func fullHeightForContents(agendaItem: AgendaItem,
+                                    maxWidth: CGFloat) -> CGFloat {
+    let maxInternalWidth = maxWidth - (16 + 28 + 20 + 16)
+    let boundingSize = CGSize(width: maxInternalWidth,
+                              height: CGFloat.greatestFiniteMagnitude)
+    let titleRect = (agendaItem.title as NSString)
+        .boundingRect(with: boundingSize,
+                      options: [.usesLineFragmentOrigin],
+                      attributes: [.font: UIFont.preferredFont(forTextStyle: .subheadline)],
+                      context: nil)
+    let timeRect = (agendaItem.displayableTimeInterval as NSString)
+        .boundingRect(with: boundingSize,
+                      options: [.usesLineFragmentOrigin],
+                      attributes: [.font: UIFont.preferredFont(forTextStyle: .caption1)],
+                      context: nil)
+
+    let height = titleRect.size.height + timeRect.size.height + 10 + 10 + 6
+    return height
+  }
+
   private var iconViewConstraints: [NSLayoutConstraint] {
     return [
       NSLayoutConstraint(item: iconView, attribute: .leading,
                          relatedBy: .equal,
                          toItem: contentView, attribute: .leading,
                          multiplier: 1, constant: 16),
-      NSLayoutConstraint(item: iconView, attribute: .top,
+      NSLayoutConstraint(item: iconView, attribute: .centerY,
                          relatedBy: .equal,
-                         toItem: contentView, attribute: .top,
-                         multiplier: 1, constant: 16),
+                         toItem: contentView, attribute: .centerY,
+                         multiplier: 1, constant: 0),
       NSLayoutConstraint(item: iconView, attribute: .height,
                          relatedBy: .equal,
                          toItem: nil, attribute: .notAnAttribute,
-                         multiplier: 1, constant: 28),
+                         multiplier: 1, constant: 24),
       NSLayoutConstraint(item: iconView, attribute: .width,
                          relatedBy: .equal,
                          toItem: nil, attribute: .notAnAttribute,
-                         multiplier: 1, constant: 28),
+                         multiplier: 1, constant: 24)
     ]
   }
 
@@ -115,10 +133,14 @@ class AgendaCollectionViewCell: MDCCollectionViewCell {
                          relatedBy: .equal,
                          toItem: iconView, attribute: .trailing,
                          multiplier: 1, constant: 20),
+      NSLayoutConstraint(item: contentView, attribute: .trailing,
+                         relatedBy: .equal,
+                         toItem: titleLabel, attribute: .trailing,
+                         multiplier: 1, constant: 16),
       NSLayoutConstraint(item: titleLabel, attribute: .top,
                          relatedBy: .equal,
                          toItem: contentView, attribute: .top,
-                         multiplier: 1, constant: 10),
+                         multiplier: 1, constant: 10)
     ]
   }
 
@@ -132,6 +154,10 @@ class AgendaCollectionViewCell: MDCCollectionViewCell {
                          relatedBy: .equal,
                          toItem: titleLabel, attribute: .bottom,
                          multiplier: 1, constant: 6),
+      NSLayoutConstraint(item: contentView, attribute: .bottom,
+                         relatedBy: .equal,
+                         toItem: timeLabel, attribute: .bottom,
+                         multiplier: 1, constant: 10)
     ]
   }
 
@@ -152,20 +178,35 @@ class AgendaCollectionViewCell: MDCCollectionViewCell {
       NSLayoutConstraint(item: colorView, attribute: .bottom,
                          relatedBy: .equal,
                          toItem: contentView, attribute: .bottom,
-                         multiplier: 1, constant: -12),
+                         multiplier: 1, constant: 0)
     ]
   }
 
   public func populate(with agendaItem: AgendaItem) {
     titleLabel.text = agendaItem.title
-    timeLabel.text =
-        AgendaCollectionViewCell.dateIntervalFormatter.string(from: agendaItem.startDate,
-                                                              to: agendaItem.endDate)
+    timeLabel.text = agendaItem.displayableTimeInterval
     colorView.backgroundColor = agendaItem.backgroundColor
     titleLabel.textColor = agendaItem.textColor
     timeLabel.textColor = agendaItem.textColor
 
     iconView.image = agendaItem.image
+  }
+
+  // MARK: - Accessibility
+
+  public override var isAccessibilityElement: Bool {
+    set {}
+    get {
+      return true
+    }
+  }
+
+  public override var accessibilityLabel: String? {
+    set {}
+    get {
+      guard let title = titleLabel.text, let time = timeLabel.text else { return nil }
+      return title + "\n" + time
+    }
   }
 
 }

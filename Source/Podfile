@@ -1,9 +1,9 @@
 # Uncomment the next line to define a global platform for your project
 platform :ios, '9.0'
+use_frameworks!
 
 def firebase
   pod 'Firebase/Core'
-  pod 'Firebase/Database' # TODO: remove Database dependency
   pod 'Firebase/Firestore'
   pod 'Firebase/Functions'
   pod 'Firebase/Messaging'
@@ -18,11 +18,6 @@ end
 
 def google_apiclient
   pod 'GoogleAPIClientForREST'
-end
-
-def alamofire
-  pod 'Alamofire'
-  pod 'AlamofireImage'
 end
 
 def maps
@@ -42,57 +37,30 @@ def test_pods
   pod 'Nimble'
 end
 
-target 'Domain' do
-  use_frameworks!
+target 'IOsched' do
 
-  # Pods for Domain
-
-  target 'DomainTests' do
-    inherit! :search_paths
-    # Pods for testing
-    test_pods
-  end
-
-end
-
-target 'Platform' do
-  use_frameworks!
-
-  # Pods for Platform
+  # Pods for IOsched
   firebase
   auth
   google_apiclient
-  alamofire
+  maps
+  lottie
 
-  target 'IOsched' do
-    # Comment the next line if you're not using Swift and don't want to use dynamic frameworks
+  pod 'MaterialComponents'
+  pod 'SwiftLint'
+  pod 'YouTubePlayer', :git => 'https://github.com/weakfl/Swift-YouTube-Player'
+  pod 'AlamofireImage'
+  pod 'GoogleMobileVision'
+  pod 'GoogleAPIClientForREST/Calendar'
+
+  target 'IOschedTests' do
     inherit! :search_paths
 
-    # Pods for IOsched
-    pod 'MaterialComponents'
-    pod 'DTCoreText'
-    pod 'SwiftLint'
-    pod 'YouTubePlayer'
-    alamofire
-    maps
-    lottie
-
-  end
-
-  target 'IOschedTestApp' do
-    inherit! :search_paths
-
-    target 'IOschedTestAppTests' do
-      inherit! :search_paths
-
-      test_pods
-    end
-  end
-
-  target 'PlatformTests' do
-    inherit! :search_paths
-    # Pods for testing
     test_pods
+  end
+
+  target 'IOschedUITests' do
+    inherit! :search_paths
   end
 
 end

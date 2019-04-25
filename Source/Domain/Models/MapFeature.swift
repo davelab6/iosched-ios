@@ -19,9 +19,45 @@ import Foundation
 public struct MapFeature {
   public let id: String
   public let title: String
-  public let type: String
+  public let subtitle: String?
+  public let iconName: String?
   public let longitude: Float
   public let latitude: Float
-  public let tag: String?
   public let description: String?
+  public let displayZoomLevel: Float?
+}
+
+extension MapFeature {
+
+  public init?(dictionary: [String: Any]) {
+    guard let id = dictionary["id"] as? String,
+      let properties = dictionary["properties"] as? [String: Any],
+      let title = properties["title"] as? String,
+      let geometry = dictionary["geometry"] as? [String: Any],
+      let coordinates = geometry["coordinates"] as? [NSNumber] else {
+        return nil
+    }
+
+    guard let longitude = coordinates.first?.floatValue,
+      let latitude = coordinates.last?.floatValue,
+      latitude != longitude else {
+        return nil
+    }
+
+    // Optional properties
+    let subtitle = properties["subtitle"] as? String
+    let description = properties["description"] as? String
+    let iconName = properties["icon"] as? String
+    let displayZoomLevel = (properties["minZoom"] as? NSNumber)?.floatValue
+
+    self.id = id
+    self.title = title
+    self.subtitle = subtitle
+    self.iconName = iconName
+    self.longitude = longitude
+    self.latitude = latitude
+    self.description = description
+    self.displayZoomLevel = displayZoomLevel
+  }
+
 }

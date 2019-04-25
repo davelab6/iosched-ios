@@ -21,8 +21,9 @@ class InfoViewController: BaseCollectionViewController {
 
   struct Constants {
     static let selectedTabColor = UIColor(red: 42 / 255, green: 42 / 255, blue: 42 / 255, alpha: 1)
-    static let unselectedTabColor = UIColor(red: 74 / 255, green: 74 / 255, blue: 74 / 255, alpha: 1)
-    static let tabBarTintColor = MDCPalette.indigo.accent200
+    static let unselectedTabColor =
+        UIColor(red: 74 / 255, green: 74 / 255, blue: 74 / 255, alpha: 1)
+    static let tabBarTintColor = UIColor(red: 26 / 255, green: 115 / 255, blue: 232 / 255, alpha: 1)
     static let titleColor = UIColor(hex: "#202124")
     static let titleHeight: CGFloat = 24.0
     static let titleFont = UIFont(name: "Product Sans", size: Constants.titleHeight)!
@@ -30,12 +31,12 @@ class InfoViewController: BaseCollectionViewController {
 
   let settingsViewModel: SettingsViewModel
   let travelDataSource = TravelRCDataSource()
-  let androidThingsDataSource = AndroidThingsDataSource()
+  let layout: MDCCollectionViewFlowLayout
 
   init(settingsViewModel: SettingsViewModel) {
     self.settingsViewModel = settingsViewModel
-    super.init(collectionViewLayout: MDCCollectionViewFlowLayout())
-
+    layout = MDCCollectionViewFlowLayout()
+    super.init(collectionViewLayout: layout)
     settingsViewModel.presentingViewController = self
   }
 
@@ -68,7 +69,7 @@ class InfoViewController: BaseCollectionViewController {
     let tabBar = MDCTabBar(frame: frame)
 
     tabBar.items = [
-      self.eventItem, self.travelItem, self.faqItem
+      eventItem, travelItem, faqItem
     ]
     tabBar.autoresizingMask = [.flexibleWidth, .flexibleBottomMargin]
     tabBar.alignment = .justified
@@ -82,36 +83,33 @@ class InfoViewController: BaseCollectionViewController {
   }
 
   func setupCollectionView() {
-    // Would be nice to use self-sizing cells here, so we don't
-    // have to duplicate cell size logic below in the layout delegate.
-    collectionView?.register(WifiInfoCollectionViewCell.self,
-                             forCellWithReuseIdentifier: WifiInfoCollectionViewCell.reuseIdentifier())
-    collectionView?.register(EventInfoCollectionViewCell.self,
-                             forCellWithReuseIdentifier: EventInfoCollectionViewCell.reuseIdentifier())
-    collectionView?.register(InfoDetailCollectionViewCell.self,
-                             forCellWithReuseIdentifier: InfoDetailCollectionViewCell.reuseIdentifier())
-    collectionView?.register(CountdownCollectionViewCell.self,
-                             forCellWithReuseIdentifier: CountdownCollectionViewCell.reuseIdentifier)
-    collectionView?.register(AndroidThingsCollectionViewCell.self,
-                             forCellWithReuseIdentifier: AndroidThingsCollectionViewCell.reuseIdentifier())
+    collectionView?.register(
+      WifiInfoCollectionViewCell.self,
+      forCellWithReuseIdentifier: WifiInfoCollectionViewCell.reuseIdentifier()
+    )
+    collectionView?.register(
+      EventInfoCollectionViewCell.self,
+      forCellWithReuseIdentifier: EventInfoCollectionViewCell.reuseIdentifier()
+    )
+    collectionView?.register(
+      InfoDetailCollectionViewCell.self,
+      forCellWithReuseIdentifier: InfoDetailCollectionViewCell.reuseIdentifier()
+    )
     styler.shouldAnimateCellsOnAppearance = false
+    collectionView.backgroundColor = .white
+    layout.minimumLineSpacing = 16
   }
 
   override func viewWillAppear(_ animated: Bool) {
     super.viewWillAppear(animated)
     travelDataSource.refreshConfig()
-
-    // Prevent the bottom of the collection view's contents from being covered by the tab controller
-    var insets = collectionView?.contentInset ?? UIEdgeInsets.zero
-    insets.bottom = self.tabBarController?.tabBar.frame.size.height ?? 0
-    collectionView?.contentInset = insets
   }
 
   override func viewDidAppear(_ animated: Bool) {
     super.viewDidAppear(animated)
     NotificationCenter.default.addObserver(self,
                                            selector: #selector(didChangePreferredContentSize(_:)),
-                                           name: .UIContentSizeCategoryDidChange,
+                                           name: UIContentSizeCategory.didChangeNotification,
                                            object: nil)
   }
 
@@ -120,19 +118,26 @@ class InfoViewController: BaseCollectionViewController {
     NotificationCenter.default.removeObserver(self)
   }
 
-  @objc override func setupAppBar() -> MDCAppBar {
+  @objc override func setupAppBar() -> MDCAppBarViewController {
     let appBar = super.setupAppBar()
 
-    appBar.headerStackView.bottomBar = tabBar
+    appBar.headerStackView.topBar = nil
+
+    let stack = HeaderStack()
+    stack.add(view: appBar.navigationBar)
+    stack.add(view: tabBar)
+
+    appBar.headerStackView.bottomBar = stack
+    appBar.headerStackView.setNeedsLayout()
 
     appBar.navigationBar.tintColor = Constants.selectedTabColor
-    let attributes: [NSAttributedStringKey: Any] = [
-      NSAttributedStringKey.foregroundColor: Constants.titleColor,
-      NSAttributedStringKey.font: Constants.titleFont
+    let attributes: [NSAttributedString.Key: Any] = [
+      NSAttributedString.Key.foregroundColor: Constants.titleColor,
+      NSAttributedString.Key.font: Constants.titleFont
     ]
     appBar.navigationBar.titleTextAttributes = attributes
 
-    let headerView = appBar.headerViewController.headerView
+    let headerView = appBar.headerView
     headerView.minimumHeight = minHeaderHeight
     headerView.maximumHeight = maxHeaderHeight
 
@@ -141,14 +146,6 @@ class InfoViewController: BaseCollectionViewController {
 
   override var preferredStatusBarStyle: UIStatusBarStyle {
     return .`default`
-  }
-
-  override var minHeaderHeight: CGFloat {
-    return super.minHeaderHeight - 60
-  }
-
-  override var maxHeaderHeight: CGFloat {
-    return super.maxHeaderHeight
   }
 
 // MARK: Analytics
@@ -174,7 +171,7 @@ class InfoViewController: BaseCollectionViewController {
     Application.sharedInstance.analytics.logEvent(AnalyticsEventSelectContent, parameters: [
       AnalyticsParameterContentType: AnalyticsParameters.screen,
       AnalyticsParameterItemID: itemID
-      ])
+    ])
   }
 
 }
@@ -184,10 +181,18 @@ class InfoViewController: BaseCollectionViewController {
 extension InfoViewController: MDCTabBarDelegate {
 
   func tabBar(_ tabBar: MDCTabBar, didSelect item: UITabBarItem) {
-    collectionView?.reloadData()
     logSelectedItem(item)
 
-    if UIAccessibilityIsVoiceOverRunning() {
+    switch item {
+    case eventItem:
+      layout.minimumLineSpacing = 16
+    case _:
+      layout.minimumLineSpacing = 0
+    }
+
+    collectionView?.reloadData()
+
+    if UIAccessibility.isVoiceOverRunning {
       collectionView?.scrollToItem(at: IndexPath(item: 0, section: 0), at: .top, animated: false)
     }
   }
@@ -198,17 +203,21 @@ extension InfoViewController: MDCTabBarDelegate {
 
 extension InfoViewController {
 
-  override func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
+  override func numberOfSections(in collectionView: UICollectionView) -> Int {
+    return 1
+  }
+
+  override func collectionView(_ collectionView: UICollectionView,
+                               numberOfItemsInSection section: Int) -> Int {
     guard let selectedItem = tabBar.selectedItem else { return 0 }
 
     switch selectedItem {
-
     case eventItem:
-      return androidThingsDataSource.shouldDisplayAndroidThingsCell ? 7 : 6
+      return 5
     case travelItem:
-      return InfoDetail.travelDetails.count + 1
+      return InfoDetail.travelDetails.count
     case faqItem:
-      return InfoDetail.faqDetails.count + 1
+      return InfoDetail.faqDetails.count
 
     case _:
       return 0
@@ -216,7 +225,8 @@ extension InfoViewController {
 
   }
 
-  override func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
+  override func collectionView(_ collectionView: UICollectionView,
+                               cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
     let selectedItem = tabBar.selectedItem ?? eventItem
 
     switch selectedItem {
@@ -238,48 +248,42 @@ extension InfoViewController {
     // This is starting to get messy. It should be refactored to use multiple sections
     // so the indexpaths are cleaner.
     guard indexPath.row != 0 else {
-      return collectionView.dequeueReusableCell(withReuseIdentifier: WifiInfoCollectionViewCell.reuseIdentifier(),
-                                                for: indexPath)
+      return collectionView.dequeueReusableCell(
+        withReuseIdentifier: WifiInfoCollectionViewCell.reuseIdentifier(),
+        for: indexPath
+      )
     }
-    if androidThingsDataSource.shouldDisplayAndroidThingsCell && indexPath.row == 1 {
-      return collectionView.dequeueReusableCell(withReuseIdentifier: AndroidThingsCollectionViewCell.reuseIdentifier(),
-                                                for: indexPath)
-    }
-    let offset = androidThingsDataSource.shouldDisplayAndroidThingsCell ? 2 : 1
-    let range = androidThingsDataSource.shouldDisplayAndroidThingsCell ? 2...5 : 1...4
+    let offset = 1
+    let range = 1...4
     switch indexPath.row {
     case range:
-      let event = Event.events[indexPath.row - offset]
-      // swiftlint:disable force_cast
-      let cell = collectionView.dequeueReusableCell(withReuseIdentifier: EventInfoCollectionViewCell.reuseIdentifier(),
-                                                    for: indexPath) as! EventInfoCollectionViewCell
-      // swiftlint:enable force_cast
+      let event = Event.events[indexPath.item - offset]
+      let cell = collectionView.dequeueReusableCell(
+        withReuseIdentifier: EventInfoCollectionViewCell.reuseIdentifier(),
+        for: indexPath
+      ) as! EventInfoCollectionViewCell
       cell.summary = event.summary
       cell.title = event.title
       cell.titleIcon = event.icon
-      cell.titleBackgroundColor = event.headerColor
       return cell
 
     case _:
-      return collectionView.dequeueReusableCell(withReuseIdentifier: CountdownCollectionViewCell.reuseIdentifier,
-                                                    for: indexPath)
+      fatalError("Unsupported index path \(indexPath)")
     }
   }
 
   func cell(forTravelCollectionView collectionView: UICollectionView,
             indexPath: IndexPath) -> UICollectionViewCell {
-    let cell = collectionView.dequeueReusableCell(withReuseIdentifier: InfoDetailCollectionViewCell.reuseIdentifier(),
-                                                  for: indexPath) as! InfoDetailCollectionViewCell
+    let cell = collectionView.dequeueReusableCell(
+      withReuseIdentifier: InfoDetailCollectionViewCell.reuseIdentifier(),
+      for: indexPath
+    ) as! InfoDetailCollectionViewCell
     switch indexPath.row {
 
     case 0..<InfoDetail.travelDetails.count:
       let detail = travelDataSource.detail(forIndex: indexPath.row)
       let expanded = shouldExpandCell(atIndexPath: indexPath, forSelectedItem: tabBar.selectedItem)
       cell.populate(detail: detail, expanded: expanded)
-
-    case InfoDetail.travelDetails.count:
-      return collectionView.dequeueReusableCell(withReuseIdentifier: CountdownCollectionViewCell.reuseIdentifier,
-                                                for: indexPath)
 
     case _:
       break
@@ -290,18 +294,16 @@ extension InfoViewController {
 
   func cell(forFAQCollectionView collectionView: UICollectionView,
             indexPath: IndexPath) -> UICollectionViewCell {
-    let cell = collectionView.dequeueReusableCell(withReuseIdentifier: InfoDetailCollectionViewCell.reuseIdentifier(),
-                                                  for: indexPath) as! InfoDetailCollectionViewCell
+    let cell = collectionView.dequeueReusableCell(
+      withReuseIdentifier: InfoDetailCollectionViewCell.reuseIdentifier(),
+      for: indexPath
+    ) as! InfoDetailCollectionViewCell
     switch indexPath.row {
 
     case 0..<InfoDetail.faqDetails.count:
       let detail = InfoDetail.faqDetails[indexPath.row]
       let expanded = shouldExpandCell(atIndexPath: indexPath, forSelectedItem: tabBar.selectedItem)
       cell.populate(detail: detail, expanded: expanded)
-
-    case InfoDetail.faqDetails.count:
-      return collectionView.dequeueReusableCell(withReuseIdentifier: CountdownCollectionViewCell.reuseIdentifier,
-                                                for: indexPath)
 
     case _:
       break
@@ -321,7 +323,6 @@ extension InfoViewController {
     let selectedItem = tabBar.selectedItem ?? eventItem
 
     switch selectedItem {
-
     case eventItem:
       return heightForEventCell(atIndexPath: indexPath)
     case travelItem:
@@ -339,69 +340,53 @@ extension InfoViewController {
     return true
   }
 
+  override func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, insetForSectionAt section: Int) -> UIEdgeInsets {
+    switch tabBar.selectedItem {
+    case eventItem:
+      return UIEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
+    case _:
+      return .zero
+    }
+  }
+
   func heightForEventCell(atIndexPath indexPath: IndexPath) -> CGFloat {
     guard indexPath.row != 0 else {
       return WifiInfoCollectionViewCell.minimumHeightForContents
     }
-    if androidThingsDataSource.shouldDisplayAndroidThingsCell {
-      switch indexPath.row {
-      case 1:
-        return AndroidThingsCollectionViewCell.heightForContents(maxWidth: view.frame.size.width)
-      case 2...5:
-        let text = Event.events[indexPath.row - 2].summary
-        return EventInfoCollectionViewCell.minimumHeight(summary: text,
-                                                         maxWidth: view.frame.size.width)
-      case _:
-        break
-      }
-    } else {
-      switch indexPath.row {
-      case 1...4:
-        let text = Event.events[indexPath.row - 1].summary
-        return EventInfoCollectionViewCell.minimumHeight(summary: text,
-                                                         maxWidth: view.frame.size.width)
-      case _:
-        break
-      }
+    switch indexPath.row {
+    case 1...4:
+      let event = Event.events[indexPath.row - 1]
+      let insetWidth = collectionView.bounds.inset(by: collectionView.contentInset).size.width
+      return EventInfoCollectionViewCell.minimumHeight(title: event.title,
+                                                       summary: event.summary,
+                                                       maxWidth: insetWidth)
+    case _:
+      break
     }
-    return CountdownCollectionViewCell.sizeForContents.height
+    return 0
   }
 
   func heightForTravelCell(atIndexPath indexPath: IndexPath) -> CGFloat {
-    // Special case IO logo view, not expandable.
-    if indexPath.row == InfoDetail.travelDetails.count {
-      return CountdownCollectionViewCell.sizeForContents.height
-    }
-    if !shouldExpandCell(atIndexPath: indexPath, forSelectedItem: tabBar.selectedItem) { return 56 }
-
-    switch indexPath.row {
-
-    case 0..<InfoDetail.travelDetails.count:
-      let detail = InfoDetail.travelDetails[indexPath.row]
+    let detail = InfoDetail.travelDetails[indexPath.row]
+    let maxWidth = view.frame.size.width
+    if shouldExpandCell(atIndexPath: indexPath, forSelectedItem: tabBar.selectedItem) {
       return InfoDetailCollectionViewCell.fullHeightForContents(detail: detail,
-                                                                maxWidth: self.view.frame.size.width)
-
-    case _:
-      return 0
+                                                                maxWidth: maxWidth)
+    } else {
+      return InfoDetailCollectionViewCell.minimumHeightForContents(withTitle: detail.title,
+                                                                   maxWidth: maxWidth)
     }
   }
 
   func heightForFAQCell(atIndexPath indexPath: IndexPath) -> CGFloat {
-    // Special case IO logo view, not expandable.
-    if indexPath.row == InfoDetail.faqDetails.count {
-      return CountdownCollectionViewCell.sizeForContents.height
-    }
-    if !shouldExpandCell(atIndexPath: indexPath, forSelectedItem: tabBar.selectedItem) { return 56 }
-
-    switch indexPath.row {
-
-    case 0..<InfoDetail.faqDetails.count:
-      let detail = InfoDetail.faqDetails[indexPath.row]
+    let detail = InfoDetail.faqDetails[indexPath.row]
+    let maxWidth = view.frame.size.width
+    if shouldExpandCell(atIndexPath: indexPath, forSelectedItem: tabBar.selectedItem) {
       return InfoDetailCollectionViewCell.fullHeightForContents(detail: detail,
-                                                                maxWidth: self.view.frame.size.width)
-
-    case _:
-      return 0
+                                                                maxWidth: maxWidth)
+    } else {
+      return InfoDetailCollectionViewCell.minimumHeightForContents(withTitle: detail.title,
+                                                                   maxWidth: maxWidth)
     }
   }
 
@@ -412,36 +397,44 @@ extension InfoViewController {
 extension InfoViewController {
 
   override func collectionView(_ collectionView: UICollectionView,
-                               shouldSelectItemAt indexPath: IndexPath) -> Bool {
-    if let _ = collectionView.cellForItem(at: indexPath) as? WifiInfoCollectionViewCell {
+                               didSelectItemAt indexPath: IndexPath) {
+    super.collectionView(collectionView, didSelectItemAt: indexPath)
+    collectionView.deselectItem(at: indexPath, animated: true)
+    if collectionView.cellForItem(at: indexPath) as? WifiInfoCollectionViewCell != nil {
       // Copy wifi password to clipboard and show it in the UI somehow.
       UIPasteboard.general.string = WifiInfoCollectionViewCell.wifiPassword
       let message = MDCSnackbarMessage()
       message.text = NSLocalizedString("Copied I/O Wifi password to clipboard", comment: "Text to be displayed after tapping the cell to copy the wifi password to clipboard. Text will be read to visually-impaired users using VoiceOver accessibility")
       MDCSnackbarManager.show(message)
-      return false
+      return
     }
 
-    if let _ = collectionView.cellForItem(at: indexPath) as? AndroidThingsCollectionViewCell {
-      UIApplication.shared.openURL(AndroidThingsCollectionViewCell.scavengerHuntURL)
-      return false
-    }
-
-    guard let selected = tabBar.selectedItem else { return false }
+    guard let selected = tabBar.selectedItem else { return }
     let expanded = toggleCell(atIndexPath: indexPath, forSelectedItem: selected)
     guard let cell = collectionView.cellForItem(at: indexPath)
-      as? InfoDetailCollectionViewCell else { return false }
+      as? InfoDetailCollectionViewCell else { return }
 
-    collectionView.performBatchUpdates({
-      if expanded {
-        cell.expand()
-      } else {
-        cell.collapse()
-      }
-      collectionView.reloadItems(at: [indexPath])
-    }) { (completed) in }
+    if expanded {
+      cell.expand()
+    } else {
+      cell.collapse()
+    }
+    UIView.animate(withDuration: 0.2) {
+      collectionView.performBatchUpdates({
+        cell.layoutIfNeeded()
+      }) { _ in }
+    }
+  }
 
-    return false
+  override func collectionView(_ collectionView: UICollectionView,
+                               shouldHideItemSeparatorAt indexPath: IndexPath) -> Bool {
+    switch tabBar.selectedItem {
+    case eventItem:
+      return true
+
+    case _:
+      return false
+    }
   }
 
 }
@@ -463,7 +456,8 @@ extension InfoViewController {
     }
   }
 
-  func shouldExpandCell(atIndexPath indexPath: IndexPath, forSelectedItem selectedItem: UIBarItem?) -> Bool {
+  func shouldExpandCell(atIndexPath indexPath: IndexPath,
+                        forSelectedItem selectedItem: UIBarItem?) -> Bool {
     guard let selected = selectedItem else { return false }
     return _shouldExpandCell(atIndexPath: indexPath, forSelectedItem: selected)
   }
@@ -494,7 +488,8 @@ extension InfoViewController {
 
   /// Returns the expanded state of the cell after the operation.
   /// True for expanded, false otherwise.
-  func toggleCell(atIndexPath indexPath: IndexPath, forSelectedItem selectedItem: UIBarItem) -> Bool {
+  func toggleCell(atIndexPath indexPath: IndexPath,
+                  forSelectedItem selectedItem: UIBarItem) -> Bool {
     switch selectedItem {
 
     case travelItem, faqItem:
@@ -526,10 +521,32 @@ extension InfoViewController {
 
 extension InfoViewController {
 
-  func showEventInfo() {
-    tabBar.selectedItem = eventItem
-    collectionView?.scrollToItem(at: IndexPath(item: 0, section: 0), at: .top, animated: false)
+  private func showItem(in item: UITabBarItem, at indexPath: IndexPath?, animated: Bool) {
+    loadViewIfNeeded() // Fixes an issue where tab bar state is modified before it's loaded.
+    tabBar.selectedItem = item
+    if let indexPath = indexPath {
+      expandCell(atIndexPath: indexPath, forSelectedItem: item)
+      collectionView.reloadData()
+      collectionView.scrollToItem(at: indexPath, at: .top, animated: animated)
+    }
+  }
+
+  func showInfo(_ infoDetail: InfoDetail, animated: Bool) {
+    if let indexPath = indexPath(forFAQ: infoDetail) {
+      showItem(in: faqItem, at: indexPath, animated: animated)
+    } else if let indexPath = indexPath(forTravel: infoDetail) {
+      showItem(in: travelItem, at: indexPath, animated: animated)
+    }
+  }
+
+  private func indexPath(forFAQ faq: InfoDetail) -> IndexPath? {
+    let index = InfoDetail.faqDetails.index(of: faq)
+    return index.flatMap { IndexPath(item: $0, section: 0) }
+  }
+
+  private func indexPath(forTravel travel: InfoDetail) -> IndexPath? {
+    let index = InfoDetail.travelDetails.index(of: travel)
+    return index.flatMap { IndexPath(item: $0, section: 0) }
   }
 
 }
-

@@ -24,7 +24,8 @@ class ScheduleViewCollectionViewCell: MDCCollectionViewCell {
     static let topMargin: CGFloat = 15
     static let bottomMargin: CGFloat = 22
     static let horizontalMargins: CGFloat = 4
-    static let reservedIconPaddedWidth: CGFloat = 40
+    static let extendedRightMargin: CGFloat = 16
+    static let reserveButtonPaddedWidth: CGFloat = 40
     static let tagContainerMaxLayoutWidth: CGFloat = 240
     static let priorityHigherThanHigh: Float = 751.0
     static let reservedIcon: UIImage? = UIImage(named: "ic_session_reserved")
@@ -44,14 +45,14 @@ class ScheduleViewCollectionViewCell: MDCCollectionViewCell {
   private lazy var bookmarkButton: MDCButton = self.setupBookmarkButton()
   private lazy var breakVerticalConstraints = [NSLayoutConstraint]()
   private lazy var liveStreamVerticalConstraints = [NSLayoutConstraint]()
-  private lazy var reservedIcon: UIImageView = self.setupReservedIcon()
+  private lazy var reserveButton: MDCButton = self.setupReserveButton()
   private lazy var tagBottomConstraint = self.setupTagBottomConstraint()
   private lazy var tagContainer: ScheduleViewTagContainerView = self.setupTagContainer()
   private lazy var tagCollapsedHeight: NSLayoutConstraint = self.setupTagCollapsedHeightConstraint()
   private lazy var timeAndLocationLabel: UILabel = self.setupTimeAndLocationLabel()
   private lazy var titleLabel: UILabel = self.setupTitleLabel()
 
-  var viewModel: ConferenceEventViewModel? {
+  var viewModel: SessionViewModel? {
     didSet {
       updateFromViewModel()
     }
@@ -73,7 +74,7 @@ class ScheduleViewCollectionViewCell: MDCCollectionViewCell {
     if let font = font {
       return font
     } else {
-      return MDCTypography.subheadFont()
+      return UIFont.mdc_preferredFont(forMaterialTextStyle: .subheadline)
     }
   }
 
@@ -102,6 +103,7 @@ class ScheduleViewCollectionViewCell: MDCCollectionViewCell {
     label.font = timeAndLocationLabelFont
     label.textColor = subtitleColor
     label.numberOfLines = 0
+    label.lineBreakMode = .byWordWrapping
     label.setContentHuggingPriority(.defaultHigh, for: .vertical)
     return label
   }
@@ -124,16 +126,12 @@ class ScheduleViewCollectionViewCell: MDCCollectionViewCell {
     return bookmarkButton
   }
 
-  private func setupBookmarkHeightCollapsed() -> NSLayoutConstraint {
-    let height = NSLayoutConstraint(item: bookmarkButton, attribute: .height, relatedBy: .equal, toItem: nil, attribute: .notAnAttribute, multiplier: 1, constant: 0)
-    return height
-  }
-
-  private func setupReservedIcon() -> UIImageView {
-    let reservedIcon = UIImageView(image: Constants.reservedIcon)
-    reservedIcon.translatesAutoresizingMaskIntoConstraints = false
-    reservedIcon.contentMode = .center
-    return reservedIcon
+  private func setupReserveButton() -> MDCButton {
+    let reservedButton = MDCFlatButton()
+    reservedButton.translatesAutoresizingMaskIntoConstraints = false
+    reservedButton.addTarget(self, action: #selector(reserveTapped(_:)), for: .touchUpInside)
+    reservedButton.contentMode = .center
+    return reservedButton
   }
 
   private func setupTagCollapsedHeightConstraint() -> NSLayoutConstraint {
@@ -158,31 +156,32 @@ class ScheduleViewCollectionViewCell: MDCCollectionViewCell {
     contentView.addSubview(timeAndLocationLabel)
     contentView.addSubview(tagContainer)
     contentView.addSubview(bookmarkButton)
-    contentView.addSubview(reservedIcon)
+    contentView.addSubview(reserveButton)
 
     let views = [
       "titleLabel": titleLabel,
       "timeAndLocationLabel": timeAndLocationLabel,
       "tagContainer": tagContainer,
       "bookmarkButton": bookmarkButton,
-      "reservedIcon": reservedIcon
-      ] as [String : Any]
+      "reserveButton": reserveButton
+      ] as [String: Any]
 
     let metrics: [String: CGFloat] = [
       "topMargin": Constants.topMargin,
       "bottomMargin": Constants.bottomMargin,
       "leftMargin": Constants.horizontalMargins,
       "rightMargin": Constants.horizontalMargins,
-      "reservedIconPaddedWidth": Constants.reservedIconPaddedWidth
+      "extendedRightMargin": Constants.extendedRightMargin,
+      "reserveButtonPaddedWidth": Constants.reserveButtonPaddedWidth
     ]
 
     var constraints =
-      NSLayoutConstraint.constraints(withVisualFormat: "H:|-(leftMargin)-[titleLabel]-(reservedIconPaddedWidth)-[bookmarkButton]-(rightMargin)-|",
+      NSLayoutConstraint.constraints(withVisualFormat: "H:|-(leftMargin)-[titleLabel]-(reserveButtonPaddedWidth)-[bookmarkButton]-(rightMargin)-|",
                                      options: [],
                                      metrics: metrics,
                                      views: views)
     constraints +=
-      NSLayoutConstraint.constraints(withVisualFormat: "H:|-(leftMargin)-[timeAndLocationLabel]-(rightMargin)-|",
+      NSLayoutConstraint.constraints(withVisualFormat: "H:|-(leftMargin)-[timeAndLocationLabel]-(extendedRightMargin)-|",
                                      options: [],
                                      metrics: metrics,
                                      views: views)
@@ -207,14 +206,14 @@ class ScheduleViewCollectionViewCell: MDCCollectionViewCell {
     constraints += [tagLeading]
 
     constraints += [
-      NSLayoutConstraint(item: reservedIcon, attribute: .trailing,
+      NSLayoutConstraint(item: reserveButton, attribute: .trailing,
                          relatedBy: .equal,
                          toItem: bookmarkButton, attribute: .leading,
                          multiplier: 1, constant: 8),
-      NSLayoutConstraint(item: reservedIcon, attribute: .centerY,
+      NSLayoutConstraint(item: reserveButton, attribute: .centerY,
                          relatedBy: .equal,
                          toItem: titleLabel, attribute: .centerY,
-                         multiplier: 1, constant: 0),
+                         multiplier: 1, constant: 0)
     ]
 
     constraints += [NSLayoutConstraint(item: bookmarkButton, attribute: .centerY,
@@ -222,15 +221,35 @@ class ScheduleViewCollectionViewCell: MDCCollectionViewCell {
                                        toItem: titleLabel, attribute: .centerY,
                                        multiplier: 1, constant: 0)]
 
+    let buttonHeightConstraints = [
+      NSLayoutConstraint(item: reserveButton,
+                         attribute: .height,
+                         relatedBy: .greaterThanOrEqual,
+                         toItem: nil,
+                         attribute: .notAnAttribute,
+                         multiplier: 1,
+                         constant: 48),
+      NSLayoutConstraint(item: bookmarkButton,
+                         attribute: .height,
+                         relatedBy: .greaterThanOrEqual,
+                         toItem: nil,
+                         attribute: .notAnAttribute,
+                         multiplier: 1,
+                         constant: 48)
+    ]
+
     contentView.addConstraints(constraints)
+    contentView.addConstraints(buttonHeightConstraints)
   }
 
   override func layoutSubviews() {
     super.layoutSubviews()
-    let preferredMaxLayoutWidth = bounds.width - Constants.horizontalMargins * 2
-    if titleLabel.preferredMaxLayoutWidth != preferredMaxLayoutWidth {
-      titleLabel.preferredMaxLayoutWidth = preferredMaxLayoutWidth
-      setNeedsLayout()
+
+    if UIAccessibility.isVoiceOverRunning {
+      var frame = titleLabel.frame
+      frame.size.height = bounds.size.height
+      frame.origin.y = 0
+      accessibilityView.frame = frame
     }
   }
 
@@ -245,37 +264,53 @@ class ScheduleViewCollectionViewCell: MDCCollectionViewCell {
         tagContainer.isHidden = true
       }
 
-      tagContainer.viewModel = viewModel.tags
-
       bookmarkButton.setImage(viewModel.bookmarkButtonImage, for: .normal)
       bookmarkButton.accessibilityLabel = viewModel.bookmarkButtonAccessibilityLabel
 
-      if viewModel.reservationStatus != .none {
-        reservedIcon.image = viewModel.reservedIconImage
-        reservedIcon.accessibilityLabel = viewModel.reservedIconAccessibilityLabel
-        reservedIcon.isHidden = false
+      if viewModel.isReservable {
+        reserveButton.isHidden = false
+        reserveButton.setImage(viewModel.reserveButtonImage, for: .normal)
+        reserveButton.accessibilityLabel = viewModel.reserveButtonAccessibilityLabel
       } else {
-        reservedIcon.image = nil
-        reservedIcon.isHidden = true
+        reserveButton.isHidden = true
+      }
+
+      // Collapse events taking place at the Office Hours / App Review tent so they
+      // take up less space.
+      let session = viewModel.session
+      if session.type == .appReviews || session.type == .gameReviews ||
+          session.type == .officeHours {
+        tagContainer.tags = []
+        tagContainer.isHidden = true
+      } else {
+        tagContainer.tags = viewModel.topics
       }
 
       registerForDynamicTypeUpdates()
+    }
+
+    if UIAccessibility.isVoiceOverRunning {
+      enableAccessibility()
+    } else {
+      removeAccessibilityOverlay()
     }
   }
 
   override func prepareForReuse() {
     super.prepareForReuse()
     NotificationCenter.default.removeObserver(self)
+    viewModel = nil
+    accessibilityView.removeFromSuperview()
   }
 
   func heightForContents(maxWidth: CGFloat) -> CGFloat {
-    let titleWidth = maxWidth - Constants.horizontalMargins * 2 - Constants.reservedIconPaddedWidth
+    let titleWidth = maxWidth - Constants.horizontalMargins * 2 - Constants.reserveButtonPaddedWidth
         - bookmarkButton.intrinsicContentSize.width - 8 * 2
     let titleSize =
         titleLabel.sizeThatFits(CGSize(width: titleWidth,
                                        height: .greatestFiniteMagnitude))
     let timeAndLocationSize = timeAndLocationLabel
-      .sizeThatFits(CGSize(width: maxWidth - (Constants.horizontalMargins * 2),
+      .sizeThatFits(CGSize(width: maxWidth - (Constants.horizontalMargins + Constants.extendedRightMargin),
                            height: .greatestFiniteMagnitude))
     let componentHeights: [CGFloat] = [
       Constants.topMargin,
@@ -289,18 +324,66 @@ class ScheduleViewCollectionViewCell: MDCCollectionViewCell {
     return componentHeights.reduce(CGFloat(0), +)
   }
 
-  var onBookmarkTappedCallback: ((_ sessionId: String) -> Void)?
-  func onBookmarkTapped(_ callback: @escaping (_ sessionId: String) -> Void) {
+  var onBookmarkTappedCallback: ((_ sessionID: String) -> Void)?
+  func onBookmarkTapped(_ callback: @escaping (_ sessionID: String) -> Void) {
     self.onBookmarkTappedCallback = callback
   }
 
   @objc func bookmarkTapped() {
-    guard let sessionId = viewModel?.id else { return }
-    onBookmarkTappedCallback?(sessionId)
+    guard let sessionID = viewModel?.id else { return }
+    onBookmarkTappedCallback?(sessionID)
+  }
+
+  @objc func reserveTapped(_ sender: Any) {
+    viewModel?.attemptReservationAction()
   }
 
   deinit {
     NotificationCenter.default.removeObserver(self)
+  }
+
+  // MARK: - Accessibility
+
+  private lazy var accessibilityView = UIView()
+  private func enableAccessibility() {
+    guard let viewModel = viewModel else { return }
+    titleLabel.isAccessibilityElement = false
+    timeAndLocationLabel.isAccessibilityElement = false
+    tagContainer.disableAccessibilitySelect()
+
+    let tagLabel = NSLocalizedString(
+      "Topics:",
+      comment: "Accessibility text preceding a list of topics (i.e. Android, Cloud)"
+    )
+
+    let topics = viewModel.topics
+    var topicsDescription = ""
+    for index in 0 ..< topics.count {
+      topicsDescription += topics[index].name
+      if index == topics.count - 1 {
+        topicsDescription += "."
+      } else {
+        topicsDescription += ", "
+      }
+    }
+
+    let accessibilityDescription = viewModel.title + "\n" +
+        viewModel.formattedDateInterval + "\n" +
+        viewModel.location + "\n" +
+        tagLabel + "\n" +
+        topicsDescription
+
+    accessibilityView.translatesAutoresizingMaskIntoConstraints = false
+    accessibilityView.isAccessibilityElement = true
+    accessibilityView.accessibilityLabel = accessibilityDescription
+    contentView.addSubview(accessibilityView)
+  }
+
+  private func removeAccessibilityOverlay() {
+    accessibilityView.removeFromSuperview()
+    titleLabel.isAccessibilityElement = true
+    timeAndLocationLabel.isAccessibilityElement = true
+    tagContainer.enableAccessibilitySelect()
   }
 
 }
@@ -309,14 +392,14 @@ class ScheduleViewCollectionViewCell: MDCCollectionViewCell {
 
 extension ScheduleViewCollectionViewCell {
 
-  func registerForDynamicTypeUpdates() {
+  private func registerForDynamicTypeUpdates() {
     NotificationCenter.default.addObserver(self,
                                            selector: #selector(dynamicTypeTextSizeDidChange(_:)),
-                                           name: .UIContentSizeCategoryDidChange,
+                                           name: UIContentSizeCategory.didChangeNotification,
                                            object: nil)
   }
 
-  @objc func dynamicTypeTextSizeDidChange(_ sender: Any) {
+  @objc private func dynamicTypeTextSizeDidChange(_ sender: Any) {
     titleLabel.font = titleLabelFont
     timeAndLocationLabel.font = timeAndLocationLabelFont
     contentView.setNeedsLayout()

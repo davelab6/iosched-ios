@@ -20,36 +20,38 @@ import MapKit
 import Firebase
 import GoogleMaps
 import MaterialComponents
-import Platform
 
 class MapViewController: UIViewController {
 
+  enum MapVariant: String {
+    case day
+    case night
+    case concert
+  }
+
   let appBar = MDCAppBar()
+
+  private(set) var variant: MapVariant = .day {
+    didSet {
+      refreshUI()
+    }
+  }
 
   fileprivate enum Constants {
     /// Location of the venue. The large venue marker is displayed at this location.
-    static let venueCoordinates = CLLocationCoordinate2D(latitude: 37.426360, 
-                                                         longitude: -122.079552)
-    static let degreesLongitude = 0.005900
-    static let degreesLatitude = 0.005600
-    static let startingLongitude = -122.082526
-    static let startingLatitude = 37.422600
-    static let overlaySouthWest = CLLocationCoordinate2D(latitude: startingLatitude, longitude: startingLongitude)
-    static let overlayNorthEast = CLLocationCoordinate2D(latitude: startingLatitude + degreesLatitude,
-                                                         longitude: startingLongitude + degreesLongitude)
-    static let venueCameraZoomDefault: Float = 17.7
-    static let venueCameraZoom: Float = 17.7
+    static let venueCoordinates = CLLocationCoordinate2D(latitude: 37.425842,
+                                                         longitude: -122.079933)
+
+    static let venueCameraZoomDefault: Float = 16.4
+    static let venueCameraZoom: Float = 15
 
     static let defaultBearing: Double = 0
-
-    static let overlayWidth: CGFloat = 950
-    static let overlayHeight: CGFloat = 1170
 
     static let labelMarkerExtraPaddingWidth: CGFloat = 27
     static let labelMarkerExtraPaddingHeight: CGFloat = 0
     static let markerWidth: CGFloat = 27
     static let markerHeight: CGFloat = 60
-    static let markerFont = MDCTypography.fontLoader().mediumFont(ofSize: 12)!
+    static let markerFont = UIFont.mdc_preferredFont(forMaterialTextStyle: .caption)
 
     /// Original position of the camera that shows the venue.
     static let cameraPosition = GMSCameraPosition(target: Constants.venueCoordinates,
@@ -63,17 +65,13 @@ class MapViewController: UIViewController {
     static let titleHeight: CGFloat = 24.0
     static let titleFont = "Product Sans"
     static let title = NSLocalizedString("Map", comment: "Title for map page")
-    static let filterButtonTitle =
-        NSLocalizedString("Filter", comment: "Button title that opens a list of filters")
-    static let enableFilterFeature = false
-    static let placeIcon = "ic_place"
   }
 
   // MARK: - Properties
   private static var initializedAPIKey = false
   fileprivate lazy var mapView: GMSMapView = self.setupMapView()
-  private lazy var overlay: GMSOverlay = self.setupOverlay()
-  private lazy var card: MapCardView = self.setupMapCardView()
+  private lazy var tileLayer: GMSTileLayer = self.setupCustomMapTileLayer(for: variant)
+  private lazy var card: MapCardView = MapCardView()
 
   fileprivate let viewModel: MapViewModel
   private let locationManager: CLLocationManager
@@ -99,10 +97,53 @@ class MapViewController: UIViewController {
   override func viewDidLoad() {
     super.viewDidLoad()
     setupViews()
-    viewModel.update {
-      self.refreshUI()
+    viewModel.update(for: variant)
+    self.refreshUI()
+  }
+
+  private let variantButton: MDCFloatingButton = {
+    let button = MDCFloatingButton()
+    button.translatesAutoresizingMaskIntoConstraints = false
+    button.addTarget(self, action: #selector(variantButtonTapped(_:)), for: .touchUpInside)
+    button.backgroundColor = UIColor(red: 26 / 255, green: 115 / 255, blue: 232 / 255, alpha: 1)
+    let filterImage = UIImage(named: "ic_map_layers")?.withRenderingMode(.alwaysTemplate)
+    button.setImage(filterImage, for: .normal)
+    button.tintColor = UIColor.white
+    button.accessibilityLabel =
+      NSLocalizedString("Change map layers",
+                        comment: "Accessibility label for users to change layers in the map view.")
+    button.setElevation(ShadowElevation.init(rawValue: 2), for: .normal)
+    return button
+  }()
+
+  @objc private func variantButtonTapped(_ sender: Any) {
+    let initiallyHidden = variantSelectorView.isHidden
+    if initiallyHidden {
+      variantSelectorView.alpha = 0
+      variantSelectorView.isHidden = false
+
+      UIView.animate(withDuration: 0.15) {
+        self.variantSelectorView.alpha = 1
+      }
+    } else {
+      UIView.animate(withDuration: 0.15, animations: {
+        self.variantSelectorView.alpha = 0
+      }, completion: { _ in
+        self.variantSelectorView.isHidden = true
+        self.variantSelectorView.alpha = 1
+      })
     }
   }
+
+  private lazy var variantSelectorView: MapVariantSelectorView = {
+    let view = MapVariantSelectorView()
+    view.buttonPressedCallback = { [weak self] variant in
+      guard let self = self else { return }
+      self.variant = variant
+      self.variantButtonTapped(self.variantButton)
+    }
+    return view
+  }()
 
   func refreshUI() {
     // Remove any existing markers.
@@ -111,6 +152,7 @@ class MapViewController: UIViewController {
       marker.userData = nil
     }
     googleMarkers.removeAll()
+    viewModel.update(for: variant)
 
     // Create new markers from updated view model.
     let newMarkers: [GMSMarker] = viewModel.mapItems.map { mapItem in
@@ -125,23 +167,20 @@ class MapViewController: UIViewController {
       if let title = googleMarker.title {
         width = title.boundingRect(with: CGSize(width: 1000, height: Constants.markerHeight),
                                    options: NSStringDrawingOptions.usesLineFragmentOrigin,
-                                   attributes: [NSAttributedStringKey.font: Constants.markerFont],
+                                   attributes: [NSAttributedString.Key.font: Constants.markerFont],
                                    context: nil).size.width
         width += Constants.labelMarkerExtraPaddingWidth
         height += Constants.labelMarkerExtraPaddingHeight
       }
 
       let iconView = MapMarkerIconView(frame: CGRect(x: 0, y: 0, width: width, height: height),
-                                       mapItemType: mapItem.type)
+                                       mapItem: mapItem)
       iconView.title = googleMarker.title
       googleMarker.iconView = iconView
-      if mapItem.type == .label {
-        googleMarker.groundAnchor = CGPoint(x: 0.5, y: 0)
-      }
       googleMarker.tracksViewChanges = false
       googleMarker.map = mapView
       googleMarker.userData = mapItem
-      googleMarker.zIndex = mapItem.type == .label ? 2 : 1
+      googleMarker.zIndex = 1
       return googleMarker
     }
     googleMarkers.append(contentsOf: newMarkers)
@@ -159,26 +198,6 @@ class MapViewController: UIViewController {
     }
     guard let marker = matchingMarker else { return }
     selectActiveMarker(marker: marker)
-  }
-
-  func setupFilterButton() -> UIBarButtonItem {
-    let button = UIBarButtonItem.init(title: Constants.filterButtonTitle,
-                                      style: .plain,
-                                      target: self,
-                                      action: #selector(filterAction))
-    button.setTitleTextAttributes([NSAttributedStringKey.foregroundColor: Constants.titleColor],
-                                  for: .normal)
-    return button
-  }
-
-  func setupCenterButton() -> UIBarButtonItem {
-    let button = UIBarButtonItem.init(image: UIImage(named: Constants.placeIcon)?.withRenderingMode(.alwaysTemplate),
-                                      style: .plain,
-                                      target: self,
-                                      action: #selector(centerAction))
-    button.tintColor = Constants.titleColor
-    button.accessibilityLabel = NSLocalizedString("Center conference on map", comment: "Accessibility label for center button.")
-    return button
   }
 
   override func viewDidAppear(_ animated: Bool) {
@@ -224,36 +243,72 @@ class MapViewController: UIViewController {
     }
     // Turn on accessibility, it is turned off by default.
     mapView.accessibilityElementsHidden = false
-    mapView.settings.myLocationButton = true
+    mapView.settings.myLocationButton = false
     mapView.settings.compassButton = true
-    overlay.map = mapView
+    mapView.preferredFrameRate = preferredFrameRate
+    mapView.setMinZoom(16, maxZoom: 19.75)
+
+    let bounds = GMSCoordinateBounds(
+      coordinate: CLLocationCoordinate2D(
+        latitude: 37.428343,
+        longitude: -122.074584
+      ), coordinate: CLLocationCoordinate2D(
+        latitude: 37.423205,
+        longitude: -122.081757
+      )
+    )
+    mapView.cameraTargetBounds = bounds
+
+    tileLayer.map = mapView
     return mapView
   }
 
-  private func setupOverlay() -> GMSOverlay {
-    let mapImage = UIImage(named: "map.png")
-    let overlayBounds = GMSCoordinateBounds(coordinate: Constants.overlaySouthWest, coordinate: Constants.overlayNorthEast)
-
-    let overlay = GMSGroundOverlay(bounds: overlayBounds, icon: mapImage)
-    overlay.bearing = 0
-    return overlay
+  private var preferredFrameRate: GMSFrameRate {
+    if ProcessInfo.processInfo.isLowPowerModeEnabled {
+      return .powerSave
+    } else {
+      return .conservative
+    }
   }
 
-  private func setupMapCardView() -> MapCardView {
-    return MapCardView()
+  private func setupCustomMapTileLayer(for mapVariant: MapVariant) -> GMSURLTileLayer {
+    func urlString(variant: String,
+                   tileSize: Int,
+                   zoomLevel: UInt,
+                   tileX: UInt,
+                   tileY: UInt) -> String {
+      return "https://storage.googleapis.com/io2019-festivus/images/maptiles/\(variant)/\(tileSize)/\(zoomLevel)/\(tileX)_\(tileY).png"
+    }
+    let baseTileSize = 256
+    let tileSizeScalar = Int(UIScreen.main.scale.rounded())
+    let tileSize = baseTileSize * tileSizeScalar
+    let urls: GMSTileURLConstructor = { (x, y, zoom) in
+      let url = urlString(variant: mapVariant.rawValue,
+                          tileSize: tileSize,
+                          zoomLevel: zoom,
+                          tileX: x,
+                          tileY: y)
+      return URL(string: url)
+    }
+
+    // Create the GMSTileLayer
+    let layer = GMSURLTileLayer(urlConstructor: urls)
+
+    layer.zIndex = 100
+    return layer
   }
 
   private func setupViews() {
-    self.title = Constants.title
-    self.addChildViewController(appBar.headerViewController)
+    title = Constants.title
+    addChild(appBar.headerViewController)
     appBar.headerViewController.headerView.backgroundColor = Constants.headerBackgroundColor
     appBar.navigationBar.tintColor = Constants.titleColor
 
     let font = UIFont(name: Constants.titleFont, size: Constants.titleHeight)
-    var attributes: [NSAttributedStringKey: Any] =
-        [ NSAttributedStringKey.foregroundColor: Constants.titleColor ]
+    var attributes: [NSAttributedString.Key: Any] =
+        [ NSAttributedString.Key.foregroundColor: Constants.titleColor ]
     if let font = font {
-      attributes[NSAttributedStringKey.font] = font
+      attributes[NSAttributedString.Key.font] = font
     }
     appBar.navigationBar.titleTextAttributes = attributes
 
@@ -263,19 +318,22 @@ class MapViewController: UIViewController {
     view.addSubview(mapView)
     mapView.translatesAutoresizingMaskIntoConstraints = false
 
+    view.addSubview(variantButton)
+    view.addSubview(variantSelectorView)
+    variantSelectorView.isHidden = true
+
     card.delegate = self
     view.addSubview(card)
     card.translatesAutoresizingMaskIntoConstraints = false
     isCardVisible = activeMarkers.count >= 1
 
     appBar.addSubviewsToParent()
-    if (Constants.enableFilterFeature) {
-      self.navigationItem.rightBarButtonItems = [setupFilterButton(), setupCenterButton()]
-    } else {
-      self.navigationItem.rightBarButtonItems = [setupCenterButton()]
-    }
 
-    let views: [String: UIView] = ["mapView": mapView, "headerView": appBar.headerViewController.headerView, "card": card]
+    let views: [String: UIView] = [
+      "mapView": mapView,
+      "headerView": appBar.headerViewController.headerView,
+      "card": card
+    ]
     var constraints = NSLayoutConstraint.constraints(withVisualFormat: "H:|[mapView]|",
                                                      options: [],
                                                      metrics: nil,
@@ -284,8 +342,47 @@ class MapViewController: UIViewController {
                                                   options: [],
                                                   metrics: nil,
                                                   views: views)
-    constraints += NSLayoutConstraint.constraints(withVisualFormat: "V:[card]-8-|", options: [], metrics: nil, views: views)
-    constraints += NSLayoutConstraint.constraints(withVisualFormat: "H:|-6-[card]-6-|", options: [], metrics: nil, views: views)
+    constraints += NSLayoutConstraint.constraints(withVisualFormat: "V:[card]-8-|",
+                                                  options: [],
+                                                  metrics: nil,
+                                                  views: views)
+    constraints += NSLayoutConstraint.constraints(withVisualFormat: "H:|-6-[card]-6-|",
+                                                  options: [],
+                                                  metrics: nil,
+                                                  views: views)
+    constraints += [
+      NSLayoutConstraint(item: variantButton,
+                         attribute: .bottom,
+                         relatedBy: .equal,
+                         toItem: bottomLayoutGuide,
+                         attribute: .top,
+                         multiplier: 1,
+                         constant: -44),
+      NSLayoutConstraint(item: variantButton,
+                         attribute: .right,
+                         relatedBy: .equal,
+                         toItem: view,
+                         attribute: .right,
+                         multiplier: 1,
+                         constant: -16)
+    ]
+
+    constraints += [
+      NSLayoutConstraint(item: variantSelectorView,
+                         attribute: .bottom,
+                         relatedBy: .equal,
+                         toItem: variantButton,
+                         attribute: .top,
+                         multiplier: 1,
+                         constant: -12),
+      NSLayoutConstraint(item: variantSelectorView,
+                         attribute: .right,
+                         relatedBy: .equal,
+                         toItem: view,
+                         attribute: .right,
+                         multiplier: 1,
+                         constant: -10)
+    ]
     NSLayoutConstraint.activate(constraints)
   }
 
@@ -320,8 +417,9 @@ class MapViewController: UIViewController {
     }
     marker.tracksViewChanges = false
 
-    if let mapItem = mapItem(marker: marker), mapItem.title != "" {
+    if let mapItem = mapItem(marker: marker), !mapItem.title.isEmpty {
       card.title = mapItem.title
+      card.subtitle = mapItem.subtitle
       card.details = mapItem.description
       isCardVisible = true
       logSelectedMapItem(withTitle: mapItem.title)
@@ -339,28 +437,11 @@ class MapViewController: UIViewController {
   }
 
   func mapItem(marker: GMSMarker) -> MapItemViewModel? {
-    if let mapItem = marker.userData as? MapItemViewModel {
-      return mapItem
-    }
-    return nil
+    return marker.userData as? MapItemViewModel
   }
 
   func markerIconView(marker: GMSMarker) -> MapMarkerIconView? {
     return marker.iconView as? MapMarkerIconView
-  }
-
-  func pairedMarker(markerNeedingPair: GMSMarker) -> GMSMarker? {
-    guard let mapItemNeedingPair = mapItem(marker: markerNeedingPair) else { return nil }
-    guard let tagNeedingPair = mapItemNeedingPair.tag else { return nil }
-    for marker in googleMarkers {
-      if marker == markerNeedingPair {
-        continue
-      }
-      if let mapItem = mapItem(marker: marker), let tag = mapItem.tag, tag == tagNeedingPair {
-        return marker
-      }
-    }
-    return nil
   }
 
   func updateMarkerVisibility() {
@@ -370,24 +451,10 @@ class MapViewController: UIViewController {
       for marker in googleMarkers {
         marker.map = nil
       }
-    } else if !viewModel.anyItemsSelected {
-      // Check if no items are selected, meaning we should show everything.
-      for marker in googleMarkers {
-        marker.map = mapView
-      }
     } else {
-      // Check each individual selection state and add any matching labels.
-      var visibleMarkers: [GMSMarker] = []
       for marker in googleMarkers {
-        if let mapItem = mapItem(marker: marker), mapItem.selected {
-          visibleMarkers.append(marker)
-          if let pairedMaker = pairedMarker(markerNeedingPair: marker) {
-            visibleMarkers.append(pairedMaker)
-          }
-        }
-      }
-      for marker in googleMarkers {
-        if visibleMarkers.contains(marker) {
+        if let view = markerIconView(marker: marker),
+          view.shouldShowTitleButton(zoomLevel: position.zoom, mapViewSize: mapView.frame.size) {
           marker.map = mapView
         } else {
           marker.map = nil
@@ -397,32 +464,12 @@ class MapViewController: UIViewController {
   }
 }
 
-// MARK: - Actions
-extension MapViewController {
-  @objc func filterAction() {
-    let filterViewController = MapFilterViewController(viewModel: viewModel, delegate: self)
-    self.present(filterViewController, animated: true, completion: nil)
-  }
-
-  @objc func centerAction() {
-    mapView.animate(to: Constants.cameraPosition)
-  }
-}
-
-// MARK: - MapFilterViewControllerDelegate
-extension MapViewController: MapFilterViewControllerDelegate {
-  func viewControllerDidFinish() {
-    self.presentedViewController?.dismiss(animated: true, completion: {
-    })
-    // Update map based on filtering.
-    updateMarkerVisibility()
-  }
-}
-
 // MARK: - MapCardViewDelegate
+
 extension MapViewController: MapCardViewDelegate {
   func viewDidTapDismiss() {
     isCardVisible = false
+    deselectActiveMarkers()
   }
 }
 
@@ -430,20 +477,10 @@ extension MapViewController: MapCardViewDelegate {
 
 extension MapViewController: GMSMapViewDelegate {
   func mapView(_ mapView: GMSMapView, didTap marker: GMSMarker) -> Bool {
-    var markerToSelect = marker
-    // If the marker is a label, try to select the matching marker.
-    if let mapIcon = markerIconView(marker: marker), mapIcon.mapItemType == .label {
-      if let pairedMarker = pairedMarker(markerNeedingPair: marker) {
-        markerToSelect = pairedMarker
-      } else {
-        return true
-      }
-    }
-
-    if activeMarkers.contains(markerToSelect) {
+    if activeMarkers.contains(marker) {
       deselectActiveMarkers()
     } else {
-      selectActiveMarker(marker: markerToSelect)
+      selectActiveMarker(marker: marker)
     }
     return true
   }

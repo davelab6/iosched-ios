@@ -34,31 +34,10 @@ class TravelRCDataSource {
     switch index {
     case 0 ..< travelDetails.count:
       let detail = travelDetails[index]
-      guard let key = TravelRCDataSource.key(forDetail: detail) else { return detail }
-      guard let detailText = remoteConfig[key].stringValue else { return detail }
-      guard !detailText.isEmpty else { return detail }
-      return InfoDetail(title: detail.title, detail: detailText)
+      return detail
 
     case _:
       fatalError("index out of bounds: \(index)")
-    }
-  }
-
-  static func key(forDetail detail: InfoDetail) -> String? {
-    switch detail {
-    case InfoDetail.shuttleService:
-      return "info_travel_shuttle"
-    case InfoDetail.carpool:
-      return "info_travel_parking"
-    case InfoDetail.publicTransportation:
-      return "info_travel_public_transportation"
-    case InfoDetail.biking:
-      return "info_travel_biking"
-    case InfoDetail.rideShare:
-      return "info_travel_ridesharing"
-
-    case _:
-      return nil
     }
   }
 

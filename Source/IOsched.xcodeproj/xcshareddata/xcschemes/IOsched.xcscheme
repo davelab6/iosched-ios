@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Scheme
-   LastUpgradeVersion = "0920"
+   LastUpgradeVersion = "1020"
    version = "1.3">
    <BuildAction
       parallelizeBuildables = "YES"
@@ -26,36 +26,25 @@
       buildConfiguration = "Debug"
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
-      language = ""
       shouldUseLaunchSchemeArgsEnv = "YES">
       <Testables>
          <TestableReference
             skipped = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "88E749651E706B9A00DD7ACC"
-               BuildableName = "DomainTests.xctest"
-               BlueprintName = "DomainTests"
+               BlueprintIdentifier = "8D71A47121F8EEFA004FB387"
+               BuildableName = "IOschedTests.xctest"
+               BlueprintName = "IOschedTests"
                ReferencedContainer = "container:IOsched.xcodeproj">
             </BuildableReference>
          </TestableReference>
          <TestableReference
-            skipped = "NO">
+            skipped = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "88E749881E706BB000DD7ACC"
-               BuildableName = "PlatformTests.xctest"
-               BlueprintName = "PlatformTests"
-               ReferencedContainer = "container:IOsched.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
-         <TestableReference
-            skipped = "NO">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "8877F39E1EC5F5D900B3A6A3"
-               BuildableName = "IOschedTestAppTests.xctest"
-               BlueprintName = "IOschedTestAppTests"
+               BlueprintIdentifier = "8D71A47F21F8EF03004FB387"
+               BuildableName = "IOschedUITests.xctest"
+               BlueprintName = "IOschedUITests"
                ReferencedContainer = "container:IOsched.xcodeproj">
             </BuildableReference>
          </TestableReference>
@@ -76,7 +65,6 @@
       buildConfiguration = "Debug"
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
-      language = ""
       launchStyle = "0"
       useCustomWorkingDirectory = "NO"
       ignoresPersistentStateOnLaunch = "NO"

@@ -22,30 +22,49 @@ class OnboardingSessionsViewController: BaseOnboardingViewController {
 // MARK: - View setup
 
   override var titleText: String {
-    return NSLocalizedString("Build your own schedule",
-                             comment: "Describes the core functionality of the app")
+    return NSLocalizedString("Sign in to receive I/O notifications and reserve seats for sessions.",
+                             comment: "Onboarding text encouraging users to sign in")
   }
 
   override var subtitleText: String {
-    return NSLocalizedString("Customize your I/O experience and reserve seats if you’re an attendee.",
-                             comment: "Tells the user that reservations are a feature")
+    return ""
   }
 
   override var nextButtonTitle: String {
-    return NSLocalizedString("Next", comment: "Navigates to the next onboarding screen")
+    return NSLocalizedString("Sign In", comment: "Button presenting a sign-in prompt.")
   }
 
   override func setupHeaderView() -> UIImageView {
     let imageView = UIImageView()
     imageView.translatesAutoresizingMaskIntoConstraints = false
-    let image = UIImage(named: "onboarding_schedule")
+    let image = UIImage(named: "onboarding_signin")
     imageView.image = image
-    imageView.contentMode = .scaleAspectFill
+    imageView.contentMode = .bottom
+    imageView.setContentHuggingPriority(.required, for: .vertical)
     return imageView
   }
 
   override func nextButtonPressed(_ sender: Any) {
-    viewModel.navigateToCountdown()
+    signIn()
+  }
+
+}
+
+extension OnboardingSessionsViewController {
+
+  func signIn() {
+    SignIn.sharedInstance.signIn { (user, error) in
+      defer {
+        self.viewModel.finishOnboardingFlow()
+      }
+      guard error == nil else {
+        self.viewModel.signInFailed(withError: error!)
+        return
+      }
+      if let user = user {
+        self.viewModel.signInSuccessful(user: user)
+      }
+    }
   }
 
 }

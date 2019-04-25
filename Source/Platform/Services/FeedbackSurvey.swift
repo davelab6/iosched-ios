@@ -72,7 +72,8 @@ public func == (lhs: FeedbackQuestion, rhs: FeedbackQuestion) -> Bool {
 }
 
 extension FeedbackQuestion: Hashable {
-  public var hashValue: Int {
-    return body.hashValue
+
+  public func hash(into hasher: inout Hasher) {
+    body.hash(into: &hasher)
   }
 }

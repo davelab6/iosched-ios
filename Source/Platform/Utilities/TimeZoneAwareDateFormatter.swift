@@ -51,6 +51,7 @@ public class TimeZoneAwareDateFormatter: DateFormatter {
   }
 
   deinit {
+    timezoneObserver = nil
     NotificationCenter.default.removeObserver(self)
   }
 

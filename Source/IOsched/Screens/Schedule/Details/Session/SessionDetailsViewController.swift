@@ -18,7 +18,7 @@ import Firebase
 import MaterialComponents
 import YouTubePlayer
 
-fileprivate enum Constants {
+private enum Constants {
   static let shareIcon = "ic_share"
   static let mapIcon = "ic_map_white"
   static let toggleBookmarkText = "Toggle Bookmark"
@@ -26,13 +26,22 @@ fileprivate enum Constants {
 
 class SessionDetailsViewController: BaseCollectionViewController {
 
-  var viewModel: SessionDetailsViewModel?
+  var viewModel: SessionDetailsViewModel
 
-  lazy var measureMainInfoCell: SessionDetailsCollectionViewMainInfoCell = self.setupMeasureMainInfoCell()
-  lazy var measureSpeakerCell: SessionDetailsCollectionViewSpeakerCell = self.setupMeasureSpeakerCell()
+  lazy var measureMainInfoCell: SessionDetailsCollectionViewMainInfoCell =
+      self.setupMeasureMainInfoCell()
+  lazy var measureSpeakerCell: SessionDetailsCollectionViewSpeakerCell =
+      self.setupMeasureSpeakerCell()
 
   lazy var bottomBarView: MDCBottomAppBarView = self.setupBottomBarView()
   lazy var youtubePlayerView: YouTubePlayerView = self.setupYoutubePlayerView()
+  lazy var headerImageView: UIImageView = {
+    let imageView = UIImageView()
+    imageView.translatesAutoresizingMaskIntoConstraints = false
+    imageView.contentMode = .scaleAspectFill
+    imageView.clipsToBounds = true
+    return imageView
+  }()
 
   var youtubeURL: URL? {
     willSet {
@@ -44,20 +53,21 @@ class SessionDetailsViewController: BaseCollectionViewController {
 
   fileprivate var bottomBarConstraint: NSLayoutConstraint?
 
-  convenience init(viewModel: SessionDetailsViewModel) {
-    self.init()
+  required init(viewModel: SessionDetailsViewModel) {
     self.viewModel = viewModel
-    self.viewModel?.onUpdate { [weak self] in
-      self?.updateFromViewModel()
-      self?.collectionView?.reloadData()
+    super.init(collectionViewLayout: MDCCollectionViewFlowLayout())
+    self.viewModel.onUpdate { [weak self] in
+      guard let strongSelf = self else { return }
+      strongSelf.updateFromViewModel()
+      strongSelf.collectionView.reloadData()
     }
     updateFromViewModel()
   }
 
-// Tentatively removed until we are sure we don't have any retain cycles.
-//  deinit {
-//    viewModel = nil
-//  }
+  @available(*, unavailable)
+  required init?(coder aDecoder: NSCoder) {
+    fatalError("init(coder:) has not been implemented")
+  }
 
 // MARK: - View setup
 
@@ -65,9 +75,15 @@ class SessionDetailsViewController: BaseCollectionViewController {
     static let fabOffset: CGFloat = 17
     static let sectionHeight: CGFloat = 50
     static let headerSize = CGSize.zero
-    static let headerFontName = "Product Sans"
-    static let headerFont = UIFont(name: LayoutConstants.headerFontName, size: 14)
-    static let headerColor = UIColor(hex: "#747474")
+    static func headerFont() -> UIFont {
+      return ProductSans.regular.style(.footnote, sizeOffset: 1)
+    }
+    static let headerColor = UIColor(red: 95 / 255, green: 99 / 255, blue: 104 / 255, alpha: 1)
+  }
+
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    registerForTimeZoneChanges()
   }
 
   @objc override func setupViews() {
@@ -75,8 +91,9 @@ class SessionDetailsViewController: BaseCollectionViewController {
 
     setupCollectionView()
     let shareButton = setupShareButton()
-    bottomBarView.leadingBarButtonItems = [shareButton]
+    bottomBarView.leadingBarButtonItems = [shareButton, calendarButton]
     view.addSubview(bottomBarView)
+    collectionView.backgroundColor = .white
 
     setupConstraints()
   }
@@ -88,8 +105,6 @@ class SessionDetailsViewController: BaseCollectionViewController {
   }
 
   func setupConstraints() {
-    let tabBarOffset = self.tabBarController?.tabBar.frame.height ?? 0
-
     let views = [
       "bottomBarView": bottomBarView
     ] as [String: Any]
@@ -100,7 +115,8 @@ class SessionDetailsViewController: BaseCollectionViewController {
                                        options: [],
                                        metrics: nil,
                                        views: views)
-      bottomBarConstraint = bottomBarView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -tabBarOffset)
+      bottomBarConstraint = bottomBarView.bottomAnchor.constraint(equalTo: bottomLayoutGuide.topAnchor,
+                                                                  constant: 0)
 
       if let constraint = bottomBarConstraint {
         constraints += [constraint]
@@ -111,42 +127,59 @@ class SessionDetailsViewController: BaseCollectionViewController {
 
       NSLayoutConstraint.activate(constraints)
     }
-    else {
-      bottomBarConstraint?.constant = -tabBarOffset
-    }
 
     setup3DTouch()
   }
 
-  override func setupAppBar() -> MDCAppBar {
+  override func setupAppBar() -> MDCAppBarViewController {
     let appBar = super.setupAppBar()
 
     appBar.headerStackView.bottomBar = youtubePlayerView
 
-    let views = [
-      "youtubePlayerView": youtubePlayerView
-    ]
+    let model = viewModel.scheduleEventDetailsViewModel
+    if model.shouldDisplayVideoplayer {
+      let views = [
+        "youtubePlayerView": youtubePlayerView
+      ]
+      let metrics = [
+        "minHeight": 200
+      ]
 
-    let metrics = [
-      "minHeight": 200
-    ]
+      var constraints =
+        NSLayoutConstraint.constraints(withVisualFormat: "H:|[youtubePlayerView]|",
+                                       options: [],
+                                       metrics: metrics,
+                                       views: views)
+      constraints +=
+        NSLayoutConstraint.constraints(withVisualFormat: "V:[youtubePlayerView(>=minHeight)]|",
+                                       options: [],
+                                       metrics: metrics,
+                                       views: views)
 
-    var constraints =
-      NSLayoutConstraint.constraints(withVisualFormat: "H:|[youtubePlayerView]|",
-                                     options: [],
-                                     metrics: metrics,
-                                     views: views)
-    constraints +=
-      NSLayoutConstraint.constraints(withVisualFormat: "V:[youtubePlayerView(>=minHeight)]|",
-                                     options: [],
-                                     metrics: metrics,
-                                     views: views)
-
-    if let model = viewModel?.scheduleEventDetailsViewModel {
-      if model.shouldDisplayVideoplayer {
-        NSLayoutConstraint.activate(constraints)
-      }
+      NSLayoutConstraint.activate(constraints)
     }
+
+    appBar.headerView.insertSubview(headerImageView, at: 0)
+
+    let constraints = [
+      NSLayoutConstraint(item: headerImageView, attribute: .top,
+                         relatedBy: .equal,
+                         toItem: appBar.headerView, attribute: .top,
+                         multiplier: 1, constant: 0),
+      NSLayoutConstraint(item: headerImageView, attribute: .left,
+                         relatedBy: .equal,
+                         toItem: appBar.headerView, attribute: .left,
+                         multiplier: 1, constant: 0),
+      NSLayoutConstraint(item: headerImageView, attribute: .right,
+                         relatedBy: .equal,
+                         toItem: appBar.headerView, attribute: .right,
+                         multiplier: 1, constant: 0),
+      NSLayoutConstraint(item: headerImageView, attribute: .bottom,
+                         relatedBy: .equal,
+                         toItem: appBar.headerView, attribute: .bottom,
+                         multiplier: 1, constant: 0)
+    ]
+    appBar.headerView.addConstraints(constraints)
 
     return appBar
   }
@@ -169,7 +202,7 @@ class SessionDetailsViewController: BaseCollectionViewController {
     collectionView?.register(MDCCollectionViewTextCell.self)
     collectionView?.register(SessionDetailsCollectionViewMainInfoCell.self)
     collectionView?.register(SessionDetailsCollectionViewSpeakerCell.self)
-    collectionView?.register(MDCCollectionViewTextCell.self, forSupplementaryViewOfKind: UICollectionElementKindSectionHeader)
+    collectionView?.register(MDCCollectionViewTextCell.self, forSupplementaryViewOfKind: UICollectionView.elementKindSectionHeader)
 
     styler.cellStyle = .default
     styler.shouldAnimateCellsOnAppearance = false
@@ -196,34 +229,65 @@ class SessionDetailsViewController: BaseCollectionViewController {
                                       target: self,
                                       action: #selector(shareAction(_:)))
     shareButton.tintColor = LayoutConstants.headerColor
-    shareButton.accessibilityLabel = NSLocalizedString("Share this session", comment: "Accessibility label for sharing button.")
+    shareButton.accessibilityLabel =
+        NSLocalizedString("Share this session",
+                          comment: "Accessibility label for sharing button.")
     return shareButton
   }
+
+  private lazy var calendarButton: UIBarButtonItem = {
+    let image = UIImage(named: "ic_calendar")
+    let button = UIBarButtonItem(image: image,
+                                 style: .plain,
+                                 target: self,
+                                 action: #selector(calendarTapped(_:)))
+    button.tintColor = LayoutConstants.headerColor
+    button.accessibilityLabel =
+        NSLocalizedString("Add session to calendar",
+                          comment: "Accessibility button label for adding an event to calendar.")
+    return button
+  }()
 
   func setupBottomBarView() -> MDCBottomAppBarView {
     bottomBarView = MDCBottomAppBarView()
     bottomBarView.translatesAutoresizingMaskIntoConstraints = false
     bottomBarView.floatingButtonPosition = .trailing
-    bottomBarView.floatingButton.addTarget(self, action: #selector(toggleFavourite), for: .touchUpInside)
+    bottomBarView.floatingButton.addTarget(self,
+                                           action: #selector(toggleFavourite),
+                                           for: .touchUpInside)
     return bottomBarView
   }
 
   fileprivate func updateFromViewModel() {
-    if let model = viewModel?.scheduleEventDetailsViewModel {
-      let button = bottomBarView.floatingButton
-      button.backgroundColor = model.bookmarkButtonBackgroundColor
-      button.setImage(model.bookmarkButtonImage, for: .normal)
-      button.accessibilityLabel = model.bookmarkButtonAccessibilityLabel
-      button.isHidden = !model.isBookmarkable
+    let model = viewModel.scheduleEventDetailsViewModel
+    let button = bottomBarView.floatingButton
+    button.backgroundColor = model.bookmarkButtonBackgroundColor
+    button.setImage(model.bookmarkButtonImage, for: .normal)
+    button.accessibilityLabel = model.bookmarkButtonAccessibilityLabel
+    button.isHidden = !model.isBookmarkable
+    calendarButton.isEnabled = SignIn.sharedInstance.currentUser != nil
 
-      youtubeURL = model.youtubeUrl
-    }
+    youtubeURL = model.youtubeURL
+    headerImageView.image = viewModel.headerImageForRoom()
+    headerImageView.isHidden = viewModel.scheduleEventDetailsViewModel.shouldDisplayVideoplayer
+  }
+
+  private func registerForTimeZoneChanges() {
+    NotificationCenter.default.addObserver(self,
+                                           selector: #selector(timeZoneDidChange(_:)),
+                                           name: .timezoneUpdate,
+                                           object: nil)
+  }
+
+  @objc private func timeZoneDidChange(_ notification: Any) {
+    updateFromViewModel()
+    collectionView.reloadData()
   }
 
 // MARK: - Analytics
 
   @objc override var screenName: String? {
-    guard let title = viewModel?.scheduleEventDetailsViewModel?.title else { return nil }
+    let title = viewModel.scheduleEventDetailsViewModel.title
     return AnalyticsParameters.itemID(forSessionTitle: title)
   }
 
@@ -243,15 +307,19 @@ class SessionDetailsViewController: BaseCollectionViewController {
   }
 
   @objc override var minHeaderHeight: CGFloat {
-    if let model = viewModel?.scheduleEventDetailsViewModel, model.shouldDisplayVideoplayer {
-      return StylingConstants.minHeaderHeightWithVideoplayer + UIApplication.shared.statusBarFrame.height
+    let model = viewModel.scheduleEventDetailsViewModel
+    if model.shouldDisplayVideoplayer {
+      return StylingConstants.minHeaderHeightWithVideoplayer
+          + UIApplication.shared.statusBarFrame.height
     }
     return StylingConstants.minHeaderHeight + UIApplication.shared.statusBarFrame.height
   }
 
   @objc override var maxHeaderHeight: CGFloat {
-    if let model = viewModel?.scheduleEventDetailsViewModel, model.shouldDisplayVideoplayer {
-      return StylingConstants.maxHeaderHeightWithVideoplayer + UIApplication.shared.statusBarFrame.height
+    let model = viewModel.scheduleEventDetailsViewModel
+    if model.shouldDisplayVideoplayer {
+      return StylingConstants.maxHeaderHeightWithVideoplayer
+          + UIApplication.shared.statusBarFrame.height
     }
     return StylingConstants.maxHeaderHeight + UIApplication.shared.statusBarFrame.height
   }
@@ -263,22 +331,48 @@ class SessionDetailsViewController: BaseCollectionViewController {
 
 // MARK: - Actions
 extension SessionDetailsViewController {
-  @objc func shareAction(_ sender: Any) {
+  @objc private func shareAction(_ sender: Any) {
     // There's something going on that prevents our bar button item from having a nonnil
     // `view` property (private API), which cause UIPopoverPresentationController to crash
     // on iPads. This is the much more disgusting workaround.
     let rect = CGRect(x: 24, y: 54, width: 24, height: 24)
     let sourceView = bottomBarView
-    viewModel?.shareSession(sourceView: sourceView, sourceRect: rect)
+    viewModel.shareSession(sourceView: sourceView, sourceRect: rect)
   }
 
-  @objc func mapAction() {
-    viewModel?.openMap()
+  @objc private func calendarTapped(_ sender: Any) {
+    viewModel.addToCalendar { error in
+      var snackBarMessage: MDCSnackbarMessage
+      if let error = error {
+        if (error as NSError).domain == GoogleCalendarSessionAdder.errorDomain {
+          snackBarMessage = MDCSnackbarMessage(text: error.localizedDescription)
+        } else {
+          let localizedGenericError = NSLocalizedString(
+            "Error saving event to calendar",
+            comment: "Generic failure message when saving event to calendar"
+          )
+          snackBarMessage = MDCSnackbarMessage(text: localizedGenericError)
+        }
+      } else {
+        guard let emailAddress = SignIn.sharedInstance.currentUser?.email else { return }
+        let localizedSuccessMessage = NSLocalizedString(
+          "Added event to calendar for \(emailAddress)",
+          comment: "Localized format string for success message when adding an event to calendar"
+        )
+        snackBarMessage = MDCSnackbarMessage(text: localizedSuccessMessage)
+      }
+
+      MDCSnackbarManager.show(snackBarMessage)
+    }
   }
 
-  @objc func toggleFavourite() {
-    viewModel?.toggleBookmark()
-    guard let title = viewModel?.scheduleEventDetailsViewModel?.title else { return }
+  @objc private func mapAction() {
+    viewModel.openMap()
+  }
+
+  @objc private func toggleFavourite() {
+    viewModel.toggleBookmark()
+    let title = viewModel.scheduleEventDetailsViewModel.title
     Application.sharedInstance.analytics.logEvent(AnalyticsEventSelectContent, parameters: [
       AnalyticsParameterContentType: AnalyticsParameters.uiEvent,
       AnalyticsParameterItemID: title,
@@ -291,7 +385,8 @@ extension SessionDetailsViewController {
 
 extension SessionDetailsViewController {
 
-  override func collectionView(_ collectionView: UICollectionView, cellHeightAt indexPath: IndexPath) -> CGFloat {
+  override func collectionView(_ collectionView: UICollectionView,
+                               cellHeightAt indexPath: IndexPath) -> CGFloat {
     let measureCell: MDCCollectionViewCell = {
       if indexPath.section == 0 {
         return measureMainInfoCell
@@ -302,7 +397,7 @@ extension SessionDetailsViewController {
     }()
 
     populateCell(cell: measureCell, forItemAt: indexPath)
-    return measureCell.systemLayoutSizeFitting(UILayoutFittingCompressedSize).height
+    return measureCell.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize).height
   }
 
 }
@@ -311,12 +406,13 @@ extension SessionDetailsViewController {
 
 extension SessionDetailsViewController {
 
-  override func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
+  override func collectionView(_ collectionView: UICollectionView,
+                               numberOfItemsInSection section: Int) -> Int {
     switch section {
     case 0:
       return 1
     case 1:
-      return viewModel?.scheduleEventDetailsViewModel?.speakers.count ?? 0
+      return viewModel.scheduleEventDetailsViewModel.speakers.count
     case _:
       return 0
     }
@@ -326,14 +422,17 @@ extension SessionDetailsViewController {
     return 2
   }
 
-  override func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
+  override func collectionView(_ collectionView: UICollectionView,
+                               cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
     switch indexPath.section {
     case 0:
-      let cell: SessionDetailsCollectionViewMainInfoCell = collectionView.dequeueReusableCell(for: indexPath)
+      let cell: SessionDetailsCollectionViewMainInfoCell =
+          collectionView.dequeueReusableCell(for: indexPath)
       populateCell(cell: cell, forItemAt: indexPath)
       return cell
     case 1:
-      let cell: SessionDetailsCollectionViewSpeakerCell = collectionView.dequeueReusableCell(for: indexPath)
+      let cell: SessionDetailsCollectionViewSpeakerCell =
+          collectionView.dequeueReusableCell(for: indexPath)
       populateCell(cell: cell, forItemAt: indexPath)
       return cell
     case _:
@@ -346,16 +445,19 @@ extension SessionDetailsViewController {
   override func collectionView(_ collectionView: UICollectionView,
                                viewForSupplementaryElementOfKind kind: String,
                                at indexPath: IndexPath) -> UICollectionReusableView {
-    let view = collectionView.dequeueReusableSupplementaryView(ofKind: kind,
-                                                               withReuseIdentifier: MDCCollectionViewTextCell.self.reuseIdentifier(),
-                                                               for: indexPath)
+    let view = collectionView.dequeueReusableSupplementaryView(
+      ofKind: kind,
+      withReuseIdentifier: MDCCollectionViewTextCell.self.reuseIdentifier(),
+      for: indexPath
+    )
     if let cell = view as? MDCCollectionViewTextCell {
       switch indexPath.section {
       case 1:
-        cell.textLabel?.text = NSLocalizedString("Speakers", comment: "Header for speakers in this session").localizedUppercase
-        cell.textLabel?.font = LayoutConstants.headerFont
+        cell.textLabel?.text = NSLocalizedString("Speakers",
+                                                 comment: "Header for speakers in this session")
+        cell.textLabel?.font = LayoutConstants.headerFont()
         cell.textLabel?.textColor = LayoutConstants.headerColor
-        break
+
       case _:
         break
       }
@@ -366,10 +468,11 @@ extension SessionDetailsViewController {
   override func collectionView(_ collectionView: UICollectionView,
                                layout collectionViewLayout: UICollectionViewLayout,
                                referenceSizeForHeaderInSection section: Int) -> CGSize {
-    if (section == 0) {
+    if section == 0 {
       return LayoutConstants.headerSize
     } else {
-      if (collectionView.dataSource?.collectionView(collectionView, numberOfItemsInSection: section) == 0) {
+      if collectionView.dataSource?.collectionView(collectionView,
+                                                   numberOfItemsInSection: section) == 0 {
         return LayoutConstants.headerSize
       }
       return CGSize(width: collectionView.bounds.width, height: LayoutConstants.sectionHeight)
@@ -382,11 +485,12 @@ extension SessionDetailsViewController {
     }
 
     if let cell = cell as? SessionDetailsCollectionViewSpeakerCell {
-      cell.viewModel = self.viewModel?.scheduleEventDetailsViewModel?.speakers[indexPath.row]
+      cell.viewModel = self.viewModel.scheduleEventDetailsViewModel.speakers[indexPath.row]
     }
   }
 
-  override func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
+  override func collectionView(_ collectionView: UICollectionView,
+                               didSelectItemAt indexPath: IndexPath) {
     let cell = collectionView.cellForItem(at: indexPath)
 
     if let cell = cell as? SessionDetailsCollectionViewSpeakerCell {
@@ -394,8 +498,10 @@ extension SessionDetailsViewController {
     }
   }
 
-  override func collectionView(_ collectionView: UICollectionView, shouldHighlightItemAt indexPath: IndexPath) -> Bool {
-    return (((collectionView.cellForItem(at: indexPath) as? SessionDetailsCollectionViewSpeakerCell) != nil))
+  override func collectionView(_ collectionView: UICollectionView,
+                               shouldHighlightItemAt indexPath: IndexPath) -> Bool {
+    return collectionView.cellForItem(at: indexPath)
+        as? SessionDetailsCollectionViewSpeakerCell != nil
   }
 
 }
@@ -414,12 +520,13 @@ extension SessionDetailsViewController: UIViewControllerPreviewingDelegate {
       //This will show the cell clearly and blur the rest of the screen for our peek.
       previewingContext.sourceRect = cellAttributes.frame
 
-      return viewModel?.detailsViewController(indexPath)
+      return viewModel.detailsViewController(indexPath)
     }
     return nil
   }
 
-  func previewingContext(_ previewingContext: UIViewControllerPreviewing, commit viewControllerToCommit: UIViewController) {
+  func previewingContext(_ previewingContext: UIViewControllerPreviewing,
+                         commit viewControllerToCommit: UIViewController) {
     self.navigationController?.pushViewController(viewControllerToCommit, animated: true)
   }
 
@@ -429,12 +536,12 @@ extension SessionDetailsViewController: UIViewControllerPreviewingDelegate {
 
 extension SessionDetailsViewController {
   override var previewActionItems: [UIPreviewActionItem] {
-    guard let viewModel = viewModel, let eventDetailsViewModel = viewModel.scheduleEventDetailsViewModel else { return [] }
+    let eventDetailsViewModel = viewModel.scheduleEventDetailsViewModel
     guard eventDetailsViewModel.isBookmarkable else { return [] }
 
     let title = eventDetailsViewModel.bookmarkPreviewActionTitle
     let actionToogleBookmark = UIPreviewAction(title: title, style: .default) { (_, _) in
-      viewModel.toggleBookmark()
+      self.viewModel.toggleBookmark()
     }
 
     return [actionToogleBookmark]
@@ -451,12 +558,12 @@ extension SessionDetailsViewController {
 
   override func scrollViewDidScroll(_ scrollView: UIScrollView) {
     super.scrollViewDidScroll(scrollView)
-    guard let model = viewModel?.scheduleEventDetailsViewModel else { return }
+    let model = viewModel.scheduleEventDetailsViewModel
     guard model.shouldDisplayVideoplayer else { return }
 
-    guard scrollView == appBar.headerViewController.headerView.trackingScrollView else { return }
+    guard scrollView == appBar.headerView.trackingScrollView else { return }
 
-    let minimumHeight = appBar.headerViewController.headerView.minimumHeight
+    let minimumHeight = appBar.headerView.minimumHeight
     let offset = scrollView.contentOffset.y
 
     let remainingheight = max(0, -offset - minimumHeight)

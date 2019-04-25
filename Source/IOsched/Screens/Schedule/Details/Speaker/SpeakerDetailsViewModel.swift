@@ -14,17 +14,14 @@
 //  limitations under the License.
 //
 
-import Foundation
-import Domain
-import Platform
 import MaterialComponents
 
 final class SpeakerDetailsViewModel {
 
   // MARK: - Dependencies
-  private let conferenceDataSource: ConferenceDataSource
-  private let bookmarkStore: WritableBookmarkStore
-  private let reservationStore: ReadonlyReservationStore
+  private let sessionsDataSource: LazyReadonlySessionsDataSource
+  private let bookmarkDataSource: RemoteBookmarkDataSource
+  private let reservationDataSource: RemoteReservationDataSource
   private let navigator: ScheduleNavigator
 
   // MARK: - Input
@@ -33,16 +30,19 @@ final class SpeakerDetailsViewModel {
   // MARK: - Output
   var speakerDetailsViewModel: ScheduleEventDetailsSpeakerViewModel?
   var speakerDetailsMainInfoViewModel: SpeakerDetailsMainInfoViewModel?
-  var relatedSessions: [ConferenceEventViewModel]?
+  var relatedSessions: [SessionViewModel]?
 
-  init(conferenceDataSource: ConferenceDataSource,
-       bookmarkStore: WritableBookmarkStore,
-       reservationStore: ReadonlyReservationStore,
+  private lazy var clashDetector = ReservationClashDetector(sessions: sessionsDataSource,
+                                                            reservations: reservationDataSource)
+
+  init(sessionsDataSource: LazyReadonlySessionsDataSource,
+       bookmarkDataSource: RemoteBookmarkDataSource,
+       reservationDataSource: RemoteReservationDataSource,
        navigator: ScheduleNavigator,
        speaker: Speaker) {
-    self.conferenceDataSource = conferenceDataSource
-    self.bookmarkStore = bookmarkStore
-    self.reservationStore = reservationStore
+    self.sessionsDataSource = sessionsDataSource
+    self.bookmarkDataSource = bookmarkDataSource
+    self.reservationDataSource = reservationDataSource
     self.navigator = navigator
 
     self.speaker = speaker
@@ -56,22 +56,23 @@ final class SpeakerDetailsViewModel {
 
   /// This method transform all inputs into the correct output
   func transform() {
-    self.speakerDetailsViewModel = ScheduleEventDetailsSpeakerViewModel(speaker, navigator: navigator)
-    self.speakerDetailsMainInfoViewModel  = SpeakerDetailsMainInfoViewModel(speaker, navigator: navigator)
-    self.relatedSessions = conferenceDataSource.allSessions
-      .filter { $0.speakerIds.contains(speaker.id) }
+    self.speakerDetailsViewModel =
+        ScheduleEventDetailsSpeakerViewModel(speaker, navigator: navigator)
+    self.speakerDetailsMainInfoViewModel =
+        SpeakerDetailsMainInfoViewModel(speaker, navigator: navigator)
+    self.relatedSessions = sessionsDataSource.sessions
+      .filter { $0.speakers.contains(speaker) }
       .map {
-        ConferenceEventViewModel(event: $0,
-                                 conferenceDataSource: self.conferenceDataSource,
-                                 bookmarkStore: self.bookmarkStore,
-                                 reservationStore: self.reservationStore)
+        SessionViewModel(session: $0,
+                         bookmarkDataSource: self.bookmarkDataSource,
+                         reservationDataSource: self.reservationDataSource,
+                         clashDetector: clashDetector,
+                         scheduleNavigator: navigator)
     }
   }
 
-  func toggleBookmark(sessionId: String) {
-    DispatchQueue.global().async {
-      self.bookmarkStore.toggleBookmark(sessionId: sessionId)
-    }
+  func toggleBookmark(sessionID: String) {
+    self.bookmarkDataSource.toggleBookmark(sessionID: sessionID)
   }
 
   // MARK: - View updates
@@ -81,8 +82,8 @@ final class SpeakerDetailsViewModel {
     updateModel()
   }
 
-  func indexPath(for sessionId: String) -> IndexPath? {
-    if let eventIndex = self.relatedSessions?.index(where: { $0.id == sessionId }) {
+  func indexPath(for sessionID: String) -> IndexPath? {
+    if let eventIndex = self.relatedSessions?.index(where: { $0.id == sessionID }) {
       return IndexPath(row: eventIndex, section: 1)
     }
 
@@ -90,36 +91,24 @@ final class SpeakerDetailsViewModel {
   }
 
   // MARK: - Model updates
-  fileprivate var conferenceUpdatesObserver: NSObjectProtocol!
-  fileprivate var bookmarkUpdatesObserver: NSObjectProtocol!
+  fileprivate var bookmarkUpdatesObserver: Any?
   private func registerForDataLayerUpdates() {
     let center = NotificationCenter.default
-    conferenceUpdatesObserver = center.addObserver(forName: .conferenceUpdate,
-                                                   object: nil,
-                                                   queue: nil) { [weak self] _ in
-                                                    // reload view
-                                                    self?.updateView()
-    }
 
     bookmarkUpdatesObserver = center.addObserver(forName: .bookmarkUpdate,
                                                  object: nil,
-                                                 queue: nil) { [weak self] notification in
-                                                  guard self != nil else { return }
-                                                  // no need to update the model, as bookmarked sessions will be filtered later
-                                                  if let sessionId = notification.userInfo?[BookmarkUpdates.sessionId] as? String {
-                                                    let indexPath = self?.indexPath(for: sessionId)
-                                                    self?.updateView(at: indexPath)
-                                                  }
-                                                  else {
-                                                    self?.updateView()
-                                                  }
+                                                 queue: nil) { [weak self] _ in
+      guard let self = self else { return }
+      // no need to update the model, as bookmarked sessions will be filtered later
+      self.updateView()
     }
   }
 
   deinit {
     timezoneObserver = nil
-    NotificationCenter.default.removeObserver(conferenceUpdatesObserver)
-    NotificationCenter.default.removeObserver(bookmarkUpdatesObserver)
+    if let observer = bookmarkUpdatesObserver {
+      NotificationCenter.default.removeObserver(observer)
+    }
   }
 
   func updateModel() {
@@ -128,8 +117,8 @@ final class SpeakerDetailsViewModel {
   }
 
   func updateView(at indexPath: IndexPath? = nil) {
-    DispatchQueue.main.async { [weak self] in
-      self?.viewUpdateCallback?(indexPath)
+    DispatchQueue.main.async {
+      self.viewUpdateCallback?(indexPath)
     }
   }
 
@@ -153,6 +142,20 @@ final class SpeakerDetailsViewModel {
       // update timezone
       self?.timeZoneUpdated()
     }
+  }
+
+  // MARK: - Header images
+
+  private static let allImageNames = [
+    "speaker_ab", "speaker_cd", "speaker_ef", "speaker_gh", "speaker_ij", "speaker_kl",
+    "speaker_mn", "speaker_op", "speaker_qr", "speaker_st", "speaker_uvw", "speaker_xyz"
+  ]
+
+  func headerImageForSpeaker() -> UIImage? {
+    // Semi-random, but consistent per speaker.
+    let index = abs(speaker.name.hash % SpeakerDetailsViewModel.allImageNames.count)
+    let imageName = SpeakerDetailsViewModel.allImageNames[index]
+    return UIImage(named: imageName)
   }
 
   // MARK: - Data update observing
@@ -212,8 +215,8 @@ final class SpeakerDetailsViewModel {
 
   func detailsViewController(for index: IndexPath) -> UIViewController? {
     if index.section == 1,
-      let session = relatedSessionAtIndex(index.row) {
-      return navigator.detailsViewController(for: session.id)
+      let viewModel = relatedSessionAtIndex(index.row) {
+      return navigator.detailsViewController(for: viewModel.session)
     }
 
     return nil
@@ -222,19 +225,20 @@ final class SpeakerDetailsViewModel {
   func populateSupplementaryView(_ view: UICollectionReusableView, forItemAt indexPath: IndexPath) {
     if let sectionHeader = view as? MDCCollectionViewTextCell {
       sectionHeader.shouldHideSeparator = false
-      sectionHeader.textLabel?.text = NSLocalizedString("Related Sessions", comment: "Indicates that the list following has sessions given by the same speaker").localizedUppercase
+      sectionHeader.textLabel?.text = NSLocalizedString("Related Sessions", comment: "Indicates that the list following has sessions given by the same speaker")
     }
   }
 
   func didSelectItemAt(indexPath index: IndexPath) {
     if index.section == 1,
-      relatedSessions!.count > index.row,
-      let session = relatedSessions?[index.row] {
-      navigator.navigateToSessionDetails(sessionId: session.id, popToRoot: false)
+      let count = relatedSessions?.count,
+      count > index.row,
+      let viewModel = relatedSessions?[index.row] {
+      navigator.navigate(to: viewModel.session, popToRoot: false)
     }
   }
 
-  func relatedSessionAtIndex(_ index: Int) -> ConferenceEventViewModel? {
+  func relatedSessionAtIndex(_ index: Int) -> SessionViewModel? {
     return relatedSessions?[index]
   }
 
@@ -256,26 +260,19 @@ final class SpeakerDetailsViewModel {
 
 struct SpeakerDetailsMainInfoViewModel {
   let bio: String
-  let plusOneUrl: URL?
-  let twitterUrl: URL?
+  let twitterURL: URL?
   private let navigator: ScheduleNavigator
 
   init (_ speaker: Speaker, navigator: ScheduleNavigator) {
     bio = speaker.bio
-    plusOneUrl = speaker.plusOneUrl
-    twitterUrl = speaker.twitterUrl
+    twitterURL = speaker.twitterURL
     self.navigator = navigator
   }
 
   func twitterTapped() {
-    if let twitterUrl = twitterUrl {
-      self.navigator.navigateToURL(twitterUrl)
+    if let twitterURL = twitterURL {
+      self.navigator.navigateToURL(twitterURL)
     }
   }
 
-  func plusTapped() {
-    if let plusOneUrl = plusOneUrl {
-      self.navigator.navigateToURL(plusOneUrl)
-    }
-  }
 }

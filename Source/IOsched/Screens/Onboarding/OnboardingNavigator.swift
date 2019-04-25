@@ -16,7 +16,6 @@
 
 import Foundation
 import UIKit
-import Domain
 import MaterialComponents
 import GoogleSignIn
 
@@ -26,14 +25,15 @@ protocol OnboardingNavigator: NSObjectProtocol {
   func navigateToStart()
   func navigateToWelcome()
   func navigateToSchedule()
-  func navigateToCountdown()
   func navigateToMainNavigation()
   func showLoginSuccessfulMessage(user: GIDGoogleUser)
   func showLoginFailedMessage()
   func onOnboardingCompleted(_ callback: @escaping OnboardingCompletedCallback)
 }
 
-final class DefaultOnboardingNavigator: NSObject, OnboardingNavigator, SignInNavigatable {
+final class DefaultOnboardingNavigator: NSObject, OnboardingNavigator {
+
+  private let signInBannerPresenter = SignInBannerPresenter()
   private let pageViewController: UIPageViewController
   private let serviceLocator: ServiceLocator
 
@@ -43,7 +43,6 @@ final class DefaultOnboardingNavigator: NSObject, OnboardingNavigator, SignInNav
 
   private lazy var welcomeController = OnboardingWelcomeViewController(viewModel: viewModel)
   private lazy var scheduleController = OnboardingSessionsViewController(viewModel: viewModel)
-  private lazy var countdownController = OnboardingCountdownViewController(viewModel: viewModel)
 
   init(serviceLocator: ServiceLocator, pageViewController: UIPageViewController) {
     self.serviceLocator = serviceLocator
@@ -76,13 +75,6 @@ final class DefaultOnboardingNavigator: NSObject, OnboardingNavigator, SignInNav
                                           completion: nil)
   }
 
-  func navigateToCountdown() {
-    pageViewController.setViewControllers([countdownController],
-                                          direction: .forward,
-                                          animated: true,
-                                          completion: nil)
-  }
-
   func navigateToMainNavigation() {
     onboardingCompletedCallback?()
   }
@@ -90,6 +82,14 @@ final class DefaultOnboardingNavigator: NSObject, OnboardingNavigator, SignInNav
   var onboardingCompletedCallback: OnboardingCompletedCallback?
   func onOnboardingCompleted(_ callback: @escaping OnboardingCompletedCallback) {
     onboardingCompletedCallback = callback
+  }
+
+  func showLoginSuccessfulMessage(user: GIDGoogleUser) {
+    signInBannerPresenter.showLoginSuccessfulMessage(user: user)
+  }
+
+  func showLoginFailedMessage() {
+    signInBannerPresenter.showLoginFailedMessage()
   }
 
 }
@@ -103,15 +103,13 @@ extension DefaultOnboardingNavigator: UIPageViewControllerDataSource {
       return 0
     case controller as OnboardingSessionsViewController:
       return 1
-    case controller as OnboardingCountdownViewController:
-      return 2
     case _:
       fatalError("Unsupported type in Onboarding Navigator")
     }
   }
 
   func presentationCount(for pageViewController: UIPageViewController) -> Int {
-    return 3
+    return 2
   }
 
   func pageViewController(_ pageViewController: UIPageViewController,
@@ -120,8 +118,6 @@ extension DefaultOnboardingNavigator: UIPageViewControllerDataSource {
     case welcomeController:
       return scheduleController
     case scheduleController:
-      return countdownController
-    case countdownController:
       return nil
     case _:
       return nil
@@ -135,8 +131,6 @@ extension DefaultOnboardingNavigator: UIPageViewControllerDataSource {
       return nil
     case scheduleController:
       return welcomeController
-    case countdownController:
-      return scheduleController
     case _:
       return nil
     }
@@ -145,7 +139,6 @@ extension DefaultOnboardingNavigator: UIPageViewControllerDataSource {
   func completeOnboardingFlow() {
     welcomeController.view.removeFromSuperview()
     scheduleController.view.removeFromSuperview()
-    countdownController.view.removeFromSuperview()
   }
 
 }

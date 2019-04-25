@@ -17,11 +17,10 @@
 import UIKit
 import CoreSpotlight
 import MobileCoreServices
-import Platform
 
 extension Application {
   private enum DeepLinkingConstants {
-    static let sessionId = "sessionId"
+    static let sessionID = "sessionId"
   }
 
   func navigateToDeepLink(uniqueIdPath: String) {
@@ -31,11 +30,11 @@ extension Application {
       if let type = IndexConstants(rawValue: uniqueIdComponents[0]) {
         switch type {
         case .sessionDomainIdentifier:
-          tabBarController.selectedViewController = scheduleViewController
-          scheduleNavigator.navigateToSessionDetails(sessionId: uniqueIdentifier, popToRoot: true)
+          tabBarController.selectedViewController = scheduleNavigationController
+          scheduleNavigator.navigateToSessionDetails(sessionID: uniqueIdentifier, popToRoot: true)
 
         case .speakerDomainIdentifier:
-          tabBarController.selectedViewController = scheduleViewController
+          tabBarController.selectedViewController = scheduleNavigationController
           // This won't work unless we can get a speaker object for the id.
           //scheduleNavigator.navigateToSpeakerDetails(speakerId: uniqueIdentifier, popToRoot: true)
         }
@@ -45,22 +44,31 @@ extension Application {
 
   func navigateToImFeelingLucky(_ shortcutItem: UIApplicationShortcutItem) {
     guard let userInfo = shortcutItem.userInfo,
-          let sessionId = userInfo[DeepLinkingConstants.sessionId] as? String else { return }
+          let sessionID = userInfo[DeepLinkingConstants.sessionID] as? String else { return }
 
     // navigate to session detected in launch shortcut
-    navigateToDeepLink(uniqueIdPath: sessionId)
+    navigateToDeepLink(uniqueIdPath: sessionID)
 
     // ... and re-register launch shortcut with a new random session
     registerImFeelingLuckyShortcut()
   }
 
   @objc func registerImFeelingLuckyShortcut() {
-    if let sessionId = self.serviceLocator.conferenceDataSource.randomSessionId() {
-      let userInfo = [DeepLinkingConstants.sessionId: IndexConstants.sessionDomainIdentifier.rawValue + "/" + sessionId]
+    if let sessionID = serviceLocator.sessionsDataSource.randomSessionId() {
+      let userInfo = [
+        DeepLinkingConstants.sessionID: IndexConstants.sessionDomainIdentifier.rawValue
+            + "/" + sessionID
+      ]
       let icon = UIApplicationShortcutIcon(type: .search)
-      let item = UIApplicationShortcutItem(type: "com.google.iosched.imfeelinglucky",
-                                           localizedTitle: "I'm feeling lucky",
-                                           localizedSubtitle: "Show a random session", icon: icon, userInfo: userInfo)
+      let item = UIApplicationShortcutItem(
+        type: "com.google.iosched.imfeelinglucky",
+        localizedTitle: NSLocalizedString("I'm feeling lucky",
+            comment: "I'm feeling luck Siri shortcut name"),
+        localizedSubtitle: NSLocalizedString("Show a random session",
+            comment: "Describes the function of the I'm feeling lucky shortcut"),
+        icon: icon,
+        userInfo: userInfo as [String: NSSecureCoding]
+      )
       UIApplication.shared.shortcutItems = [item]
     }
   }
@@ -70,7 +78,7 @@ extension Application {
 extension AppDelegate {
   func application(_ application: UIApplication,
                    continue userActivity: NSUserActivity,
-                   restorationHandler: @escaping ([Any]?) -> Void) -> Bool {
+                   restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void) -> Bool {
     if userActivity.activityType == CSSearchableItemActionType {
       if let uniqueIdentifier = userActivity.userInfo?[CSSearchableItemActivityIdentifier] as? String {
         Application.sharedInstance.navigateToDeepLink(uniqueIdPath: uniqueIdentifier)
@@ -81,7 +89,7 @@ extension AppDelegate {
   }
 
   func handleShortcutItem(shortcutItem: UIApplicationShortcutItem) -> Bool {
-    Application.sharedInstance.navigateToImFeelingLucky(shortcutItem)
+    app.navigateToImFeelingLucky(shortcutItem)
     return true
   }
 

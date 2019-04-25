@@ -15,7 +15,6 @@
 //
 
 import Foundation
-import Domain
 import FirebaseAuth
 
 public protocol UserRegistrationService {

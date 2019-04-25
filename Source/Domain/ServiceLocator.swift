@@ -17,10 +17,10 @@
 import Foundation
 
 public protocol ServiceLocator: class {
-  var conferenceDataSource: ConferenceDataSource { get }
-  var bookmarkStore: WritableBookmarkStore { get }
-  var reservationStore: ReadonlyReservationStore { get }
-  var userState: WritableUserState { get }
+  var sessionsDataSource: LazyReadonlySessionsDataSource { get }
+  var bookmarkDataSource: RemoteBookmarkDataSource { get }
+  var reservationDataSource: RemoteReservationDataSource { get }
+  var userState: PersistentUserState { get }
 
   func updateConferenceData(_ callback: @escaping () -> Void)
 }

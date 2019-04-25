@@ -23,54 +23,15 @@ final class MapMarkerIconView: UIView {
   private enum Constants {
     static let labelPadding = UIEdgeInsets(top: 8, left: 8, bottom: 8, right: 8)
     static let labelHeight = 27
-    static let labelCornerRadius: CGFloat = 27 / 2.0
-    static let labelFont = MDCTypography.fontLoader().mediumFont(ofSize: 12)
+    static let labelCornerRadius: CGFloat = 2
+    static let labelFont = UIFont.mdc_preferredFont(forMaterialTextStyle: .caption)
 
-    static let selectedMarkerColor = UIColor(red:61.0 / 255.0, green:90.0 / 255.0, blue:254.0 / 255.0, alpha:1.0)
-    static let unselectedMarkerColor = UIColor(red:0.61, green:0.61, blue:0.61, alpha:1.0)
-    static let titleButtonBackgroundColor = UIColor(red:0.29, green:0.29, blue:0.29, alpha:1.0)
+    static let selectedMarkerColor = UIColor(red: 61.0 / 255.0, green: 90.0 / 255.0, blue: 254.0 / 255.0, alpha: 1.0)
+    static let unselectedMarkerColor = UIColor(red: 0.61, green: 0.61, blue: 0.61, alpha: 1.0)
+    static let titleButtonBackgroundColor = UIColor(red: 66 / 255, green: 133 / 255, blue: 244 / 255, alpha: 1.0)
 
-    static func imageName(for mapItemType: MapItemType) -> String {
-      switch mapItemType {
-      case .ada:
-        return "ic_ada"
-      case .bar:
-        return "ic_bar"
-      case .bike:
-        return "ic_bike"
-      case .charging:
-        return "ic_charging"
-      case .dog:
-        return "ic_dog"
-      case .food:
-        return "ic_food"
-      case .info:
-        return "ic_info"
-      case .medical:
-        return "ic_medical"
-      case .parking:
-        return "ic_parking"
-      case .restroom:
-        return "ic_restroom"
-      case .ride:
-        return "ic_rideshare"
-      case .rideshare:
-        return "ic_rideshare"
-      case .shuttle:
-        return "ic_shuttle"
-      case .store:
-        return "ic_store"
-      case .press:
-        return "ic_press_lounge"
-      case .mothersRoom:
-        return "ic_mothers_room"
-      case .communityLounge:
-        return "ic_community_lounge"
-      case .certificationLounge:
-        return "ic_certification_lounge"
-      default:
-        return "ic_place"
-      }
+    static func defaultImage() -> UIImage {
+      return UIImage(named: "ic_place")!
     }
   }
 
@@ -78,7 +39,46 @@ final class MapMarkerIconView: UIView {
 
   private let imageView: UIImageView
   private let titleButton = UIButton()
-  let mapItemType: MapItemType
+  private let mapItem: MapItemViewModel
+  let shouldHideTitleButton: Bool
+
+  func shouldShowTitleButton(zoomLevel: Float, mapViewSize: CGSize) -> Bool {
+    if let displayZoomLevel = mapItem.displayZoomLevel {
+      return zoomLevel >= displayZoomLevel
+    }
+
+    let contentArea: Float
+    if titleButton.isHidden {
+      contentArea = Float(imageView.frame.size.width * imageView.frame.size.height)
+    } else {
+      contentArea = Float(titleButton.intrinsicContentSize.width
+        * titleButton.intrinsicContentSize.height)
+    }
+
+    let latitude = mapItem.latitude
+    let metersPerPoint = Float(cos(latitude * Double.pi / 180) * 2 * Double.pi * 6378137)
+        / (256 * powf(2, zoomLevel))
+
+    let approximateContentSizeInSquareMeters = metersPerPoint * contentArea
+
+    // Amphitheatre + parking lots is approx. 800m by 600m, measured in Google Maps.
+    let approximateVenueArea: Float = 800 * 600
+    // Cap the considered area size at the total venue size. This way when zooming out
+    // the icons won't all bunch together.
+    let boundedViewportArea = min(Float(mapViewSize.width * mapViewSize.height),
+                                  approximateVenueArea)
+
+    // Don't show the label/button if it takes up more than a certain portion of the map area.
+    let visibilityThreshold: Float = 0.015
+    let thresholdScalar: Float = 1 - zoomLevel / 36
+    let compositeThreshold = visibilityThreshold * thresholdScalar
+
+    // The percentage of the screen that the content is taking up.
+    let contentFootprintRatio = approximateContentSizeInSquareMeters / boundedViewportArea
+
+    let shouldShow = contentFootprintRatio < compositeThreshold
+    return shouldShow
+  }
 
   var title: String? {
     didSet {
@@ -92,16 +92,25 @@ final class MapMarkerIconView: UIView {
     didSet {
       if selected {
         imageView.tintColor = Constants.selectedMarkerColor
+        titleButton.isHidden = false
       } else {
         imageView.tintColor = Constants.unselectedMarkerColor
+        titleButton.isHidden = shouldHideTitleButton
       }
     }
   }
 
-  init(frame: CGRect, mapItemType: MapItemType) {
-    imageView = UIImageView(image:UIImage(named: Constants.imageName(for: mapItemType)))
+  init(frame: CGRect, mapItem: MapItemViewModel) {
+    self.mapItem = mapItem
+    imageView = UIImageView()
+    if let iconName = mapItem.iconName, let image = UIImage(named: iconName) {
+      imageView.image = image
+      shouldHideTitleButton = true
+    } else {
+      imageView.image = Constants.defaultImage()
+      shouldHideTitleButton = false
+    }
     imageView.tintColor = Constants.unselectedMarkerColor
-    self.mapItemType = mapItemType
     super.init(frame: frame)
 
     isOpaque = false
@@ -111,21 +120,45 @@ final class MapMarkerIconView: UIView {
     imageView.translatesAutoresizingMaskIntoConstraints = false
     titleButton.translatesAutoresizingMaskIntoConstraints = false
 
-    imageView.contentMode = .bottom
+    imageView.contentMode = .scaleAspectFit
 
     titleButton.titleLabel?.font = Constants.labelFont
+    titleButton.titleLabel?.enableAdjustFontForContentSizeCategory()
     titleButton.setTitleColor(.white, for: .normal)
     titleButton.backgroundColor = Constants.titleButtonBackgroundColor
     titleButton.contentEdgeInsets = Constants.labelPadding
     titleButton.isUserInteractionEnabled = false
     titleButton.layer.cornerRadius = Constants.labelCornerRadius
+    titleButton.isHidden = shouldHideTitleButton
 
     let views: [String: UIView] = ["imageView": imageView, "titleButton": titleButton]
     var constraints = NSLayoutConstraint.constraints(withVisualFormat: "V:[titleButton]-3-[imageView]|", options: [], metrics: nil, views: views)
-    constraints += NSLayoutConstraint.constraints(withVisualFormat: "H:|[imageView]|", options: [], metrics: nil, views: views)
     constraints += NSLayoutConstraint.constraints(withVisualFormat: "H:|[titleButton]|", options: [], metrics: nil, views: views)
     constraints += [
       titleButton.heightAnchor.constraint(equalToConstant: CGFloat(Constants.labelHeight))
+    ]
+    constraints += [
+      NSLayoutConstraint(item: imageView,
+                         attribute: .width,
+                         relatedBy: .equal,
+                         toItem: nil,
+                         attribute: .notAnAttribute,
+                         multiplier: 1,
+                         constant: 24),
+      NSLayoutConstraint(item: imageView,
+                         attribute: .height,
+                         relatedBy: .equal,
+                         toItem: nil,
+                         attribute: .notAnAttribute,
+                         multiplier: 1,
+                         constant: 24),
+      NSLayoutConstraint(item: imageView,
+                         attribute: .centerX,
+                         relatedBy: .equal,
+                         toItem: self,
+                         attribute: .centerX,
+                         multiplier: 1,
+                         constant: 0)
     ]
     NSLayoutConstraint.activate(constraints)
   }

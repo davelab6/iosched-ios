@@ -14,7 +14,6 @@
 //  limitations under the License.
 //
 
-import Domain
 import Firebase
 
 enum AnalyticsParameters {
@@ -77,9 +76,9 @@ enum AnalyticsParameters {
 
 final class AnalyticsWrapper {
 
-  let userState: WritableUserState
+  let userState: PersistentUserState
 
-  init(userState: WritableUserState) {
+  init(userState: PersistentUserState) {
     self.userState = userState
   }
 

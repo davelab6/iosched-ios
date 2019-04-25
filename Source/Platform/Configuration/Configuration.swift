@@ -43,7 +43,7 @@ public class Configuration {
     static let mapsKey = "GOOGLE_MAPS_KEY"
 
     /// Base URL of the Google Cloud Storage bucket containing the conference schedule data
-    static let scheduleDataBaseUrl = "SCHEDULE_DATA_BASE_URL"
+    static let scheduleDataBaseURL = "SCHEDULE_DATA_BASE_URL"
 
     static let registrationEndpointKey = ""
   }

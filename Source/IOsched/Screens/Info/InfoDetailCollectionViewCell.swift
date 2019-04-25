@@ -26,7 +26,7 @@ class InfoDetailCollectionViewCell: MDCCollectionViewCell {
     }
 
     static let titleTextColor = UIColor(red: 66 / 255, green: 66 / 255, blue: 66 / 255, alpha: 1)
-    static let expandedTitleTextColor = UIColor(red: 87 / 255, green: 117 / 255, blue: 244 / 255, alpha: 1)
+    static let expandedTitleTextColor = UIColor(red: 26 / 255, green: 115 / 255, blue: 232 / 255, alpha: 1)
 
     static let arrowLayerColor = UIColor(red: 150 / 255, green: 150 / 255, blue: 150 / 255, alpha: 1)
     static let expandedArrowLayerColor = Constants.expandedTitleTextColor
@@ -67,7 +67,7 @@ class InfoDetailCollectionViewCell: MDCCollectionViewCell {
     // Duplicated constraints because we're manually calculating cell height. Switch to auto cell
     // height, if possible.
     static let titleLabelInsets: (top: CGFloat, left: CGFloat, bottom: CGFloat) = (
-      top: 20, left: 16, bottom: 20
+      top: 16, left: 16, bottom: 16
     )
 
     static let detailViewTopInset: CGFloat = 64
@@ -106,7 +106,6 @@ class InfoDetailCollectionViewCell: MDCCollectionViewCell {
     didSet {
       if let detail = detail {
         detailView.detail = detail
-//        setupDetailViewConstraints(expanded: true)
         setNeedsLayout()
       }
     }
@@ -141,15 +140,23 @@ class InfoDetailCollectionViewCell: MDCCollectionViewCell {
   }
 
   static func minimumHeightForContents(withTitle title: String, maxWidth: CGFloat) -> CGFloat {
-    let lineHeight = Constants.titleFont().lineHeight
-    return lineHeight + Constants.titleLabelInsets.top + Constants.titleLabelInsets.bottom
+    let boundingSize = CGSize(width: maxWidth - 70, height: .greatestFiniteMagnitude)
+    let options: NSStringDrawingOptions =
+        [.usesLineFragmentOrigin, .usesDeviceMetrics, .usesFontLeading]
+    let attributes = [NSAttributedString.Key.font: Constants.titleFont()]
+    let titleSize = title.boundingRect(with: boundingSize,
+                                       options: options,
+                                       attributes: attributes,
+                                       context: nil)
+    return titleSize.height + Constants.titleLabelInsets.top + Constants.titleLabelInsets.bottom
   }
 
   static func fullHeightForContents(detail: InfoDetail,
                                     maxWidth: CGFloat) -> CGFloat {
     let width = maxWidth - Constants.titleLabelInsets.left * 2
-    let height = Constants.detailViewTopInset + InfoDetailView.height(forDetailText: detail.detail,
-                                                                      maxWidth: width)
+    let titleHeight = minimumHeightForContents(withTitle: detail.title, maxWidth: maxWidth)
+    let height = titleHeight + InfoDetailView.height(forDetailText: detail.detail,
+                                                     maxWidth: width)
     return height
   }
 
@@ -161,6 +168,7 @@ class InfoDetailCollectionViewCell: MDCCollectionViewCell {
     titleLabel.textColor = Constants.titleTextColor
     titleLabel.translatesAutoresizingMaskIntoConstraints = false
     titleLabel.accessibilityHint = Constants.collapsedAccessibilityHint
+    titleLabel.setContentHuggingPriority(.defaultLow, for: .vertical)
   }
 
   private func setupDetailViewContainer() {
@@ -241,12 +249,12 @@ class InfoDetailCollectionViewCell: MDCCollectionViewCell {
                                           constant: -54))
     // title label centerY
     constraints.append(NSLayoutConstraint(item: titleLabel,
-                                          attribute: .centerY,
+                                          attribute: .top,
                                           relatedBy: .equal,
                                           toItem: contentView,
                                           attribute: .top,
                                           multiplier: 1,
-                                          constant: 28))
+                                          constant: 16))
     // detail view top
     constraints.append(NSLayoutConstraint(item: detailViewContainer,
                                           attribute: .top,
@@ -273,12 +281,12 @@ class InfoDetailCollectionViewCell: MDCCollectionViewCell {
                                           constant: -16))
     // icon view top
     constraints.append(NSLayoutConstraint(item: arrowIconView,
-                                          attribute: .top,
+                                          attribute: .centerY,
                                           relatedBy: .equal,
-                                          toItem: contentView,
-                                          attribute: .top,
+                                          toItem: titleLabel,
+                                          attribute: .centerY,
                                           multiplier: 1,
-                                          constant: 24))
+                                          constant: 0))
     // icon view right
     constraints.append(NSLayoutConstraint(item: arrowIconView,
                                           attribute: .right,
@@ -331,7 +339,30 @@ class InfoDetailCollectionViewCell: MDCCollectionViewCell {
 
   override func prepareForReuse() {
     super.prepareForReuse()
-    layer.zPosition = 0
+  }
+
+  // MARK: - Accessibility
+
+  fileprivate var expanded: Bool = false
+
+  override var isAccessibilityElement: Bool {
+    set {}
+    get { return !expanded }
+  }
+
+  override var accessibilityLabel: String? {
+    set {}
+    get {
+      return titleLabel.accessibilityLabel
+    }
+  }
+
+  override var accessibilityHint: String? {
+    set {}
+    get {
+      return NSLocalizedString("Double-tap to expand details.",
+                               comment: "Accessibility hint instructing users how to read the contents of a FAQ/Travel item")
+    }
   }
 
 }
@@ -341,7 +372,7 @@ class InfoDetailCollectionViewCell: MDCCollectionViewCell {
 extension InfoDetailCollectionViewCell {
 
   func expand() {
-    layer.zPosition = -10
+    expanded = true
     setupDetailViewConstraints(expanded: true)
     arrowIconView.transform = .identity
     titleLabel.textColor = Constants.expandedTitleTextColor
@@ -352,10 +383,14 @@ extension InfoDetailCollectionViewCell {
       iconLayer.strokeColor = Constants.expandedArrowLayerColor.cgColor
       iconLayer.fillColor = Constants.expandedArrowLayerColor.cgColor
     }
-    layoutIfNeeded()
+    setNeedsLayout()
+    if UIAccessibility.isVoiceOverRunning {
+      UIAccessibility.post(notification: .layoutChanged, argument: detailView.detailTextView)
+    }
   }
 
   func collapse() {
+    expanded = false
     setupDetailViewConstraints(expanded: false)
     titleLabel.textColor = Constants.titleTextColor
     arrowIconView.transform = CGAffineTransform(rotationAngle: CGFloat.pi)
@@ -366,7 +401,7 @@ extension InfoDetailCollectionViewCell {
       iconLayer.strokeColor = Constants.arrowLayerColor.cgColor
       iconLayer.fillColor = Constants.arrowLayerColor.cgColor
     }
-    layoutIfNeeded()
+    setNeedsLayout()
   }
 
 }

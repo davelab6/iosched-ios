@@ -15,10 +15,8 @@
 //
 
 import Foundation
-import Domain
-import Platform
 
-struct ScheduleFilterViewModel {
+public struct ScheduleFilterViewModel {
 
   private enum Constants {
     static let topicsTitle =
@@ -27,16 +25,14 @@ struct ScheduleFilterViewModel {
     static let levelsTitle =
       NSLocalizedString("Levels",
                         comment: "Title of schedule filter header item for levels.")
-    static let themesTitle =
+    static let typesTitle =
       NSLocalizedString("Event Types",
                         comment: "Title of schedule filter header item for event types.")
-    static let typeKey = "type"
     static let tagKey = "tag"
     static let levelKey = "level"
-    static let themeKey = "theme"
+    static let typeKey = "type"
   }
 
-  private let navigator: ScheduleNavigator
   var filterSections = [ScheduleFilterSectionViewModel]()
   var filterSectionsByType = [String: ScheduleFilterSectionViewModel]()
 
@@ -44,7 +40,7 @@ struct ScheduleFilterViewModel {
     // Build a string to display the selected filters.
     var filters = [String]()
     filters.append(contentsOf: selectedTags)
-    filters.append(contentsOf: selectedThemes)
+    filters.append(contentsOf: selectedTypes)
     filters.append(contentsOf: selectedLevels)
     return filters.count > 0 ? filters.joined(separator: ", ") : nil
   }
@@ -57,8 +53,8 @@ struct ScheduleFilterViewModel {
     return selectedTags.map { tag in return tag.name }
   }
 
-  var selectedThemes: [String] {
-    guard let tagsSection = filterSectionsByType[Constants.themeKey] else { return [] }
+  var selectedTypes: [String] {
+    guard let tagsSection = filterSectionsByType[Constants.typeKey] else { return [] }
     let selectedTags = tagsSection.items.filter { tag -> Bool in
       return tag.selected
     }
@@ -73,26 +69,24 @@ struct ScheduleFilterViewModel {
     return selectedTags.map { tag in return tag.name }
   }
 
-  init(conferenceDataSource: ConferenceDataSource, navigator: ScheduleNavigator) {
-    self.navigator = navigator
-
-    // Themes section.
-    let themeTags = conferenceDataSource.allTypes
-    let themeItems: [ScheduleFilterItemViewModel] = themeTags.map { themeTag in
-      return ScheduleFilterItemViewModel(name: themeTag.name,
-                                         color: themeTag.colorString,
-                                         orderInCategory: themeTag.orderInCategory)
-      }.sorted(by: { (theme1, theme2) -> Bool in
-        return theme1.orderInCategory ?? 0 < theme2.orderInCategory ?? 0
+  init() {
+    // Types section.
+    let typeTags = EventTag.allTypes
+    let typeItems: [ScheduleFilterItemViewModel] = typeTags.map { typeTag in
+      return ScheduleFilterItemViewModel(name: typeTag.name,
+                                         color: typeTag.colorString,
+                                         orderInCategory: typeTag.orderInCategory)
+      }.sorted(by: { (type1, type2) -> Bool in
+        return type1.orderInCategory ?? 0 < type2.orderInCategory ?? 0
       })
 
-    let themesFilterSection = ScheduleFilterSectionViewModel(name: Constants.themesTitle,
-                                                             items: themeItems)
-    filterSectionsByType[Constants.themeKey] = themesFilterSection
-    filterSections.append(themesFilterSection)
+    let typesFilterSection = ScheduleFilterSectionViewModel(name: Constants.typesTitle,
+                                                            items: typeItems)
+    filterSectionsByType[Constants.typeKey] = typesFilterSection
+    filterSections.append(typesFilterSection)
 
     // Levels section.
-    let levelTags = conferenceDataSource.allLevels
+    let levelTags = EventTag.allLevels
     let levelItems: [ScheduleFilterItemViewModel] = levelTags.map { levelTag in
       return ScheduleFilterItemViewModel(name: levelTag.name,
                                          color: levelTag.colorString,
@@ -106,7 +100,7 @@ struct ScheduleFilterViewModel {
     filterSections.append(levelsFilterSection)
 
     // Topics section.
-    let trackTags = conferenceDataSource.allTopics
+    let trackTags = EventTag.allTopics
     let topicItems: [ScheduleFilterItemViewModel] = trackTags.map { trackTag in
       return ScheduleFilterItemViewModel(name: trackTag.name, color: trackTag.colorString)
     }.sorted(by: { (topic1, topic2) -> Bool in
@@ -118,24 +112,22 @@ struct ScheduleFilterViewModel {
     filterSections.append(tagsFilterSection)
   }
 
-  func shouldShow(tags: [TagEventViewModel],
-                  levels: [LevelEventViewModel],
-                  themes: [ThemeEventViewModel],
-                  isLiveStream: Bool,
-                  isSession: Bool) -> Bool {
+  func shouldShow(topics: [EventTag],
+                  levels: [EventTag],
+                  types: [EventTag]) -> Bool {
     // If we passed the live stream/session filters, each section is an AND if any items are selected.
     // Within a section the items match with OR.
     let topicsMatch = tagsMatch(selectedTags: selectedTags,
-                                eventTags: tags.map { tag in return tag.name })
+                                eventTags: topics.map { tag in return tag.name })
     let levelsMatch = tagsMatch(selectedTags: selectedLevels,
                                 eventTags: levels.map { tag in return tag.name })
-    let themesMatch = tagsMatch(selectedTags: selectedThemes,
-                                eventTags: themes.map { tag in return tag.name })
-    return topicsMatch && levelsMatch && themesMatch
+    let typesMatch = tagsMatch(selectedTags: selectedTypes,
+                               eventTags: types.map { tag in return tag.name })
+    return topicsMatch && levelsMatch && typesMatch
   }
 
   func tagsMatch(selectedTags: [String], eventTags: [String]) -> Bool {
-    if selectedTags.count == 0 {
+    if selectedTags.isEmpty {
       return true
     }
     return eventTags.reduce(false, {(sum, tag) in
@@ -149,6 +141,15 @@ struct ScheduleFilterViewModel {
         item.selected = false
       }
     }
+  }
+
+  var isEmpty: Bool {
+    for section in filterSections {
+      for item in section.items where item.selected {
+          return false
+      }
+    }
+    return true
   }
 }
 

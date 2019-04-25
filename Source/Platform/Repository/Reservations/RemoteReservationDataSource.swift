@@ -14,45 +14,106 @@
 //  limitations under the License.
 //
 
-import Foundation
-import Domain
 import FirebaseFirestore
 import FirebaseAuth
 import GoogleSignIn
 
-class RemoteReservationDataSource: ReservationDataSource {
+/// A class responsible for fetching reservations from Firestore.
+/// This class will not fetch data if there is no currently logged in user, and will
+/// automatically fetch data after the `observeReservationUpdates` method is called even
+/// in the event that the user signs out and re-authenticates later on. This class will
+/// stop fetching data if `stopObservingUpdates` is called.
+public class RemoteReservationDataSource {
 
+  // Dependencies
   private let firestore: Firestore
-  private let auth: Auth
+  private let signIn: SignInInterface
 
-  private var listener: ListenerRegistration?
-  private var sessions: [ReservedSession] = []
+  public private(set) var sessionsMap: [String: ReservationStatus] = [:]
+  public private(set) var reservedSessions: [ReservedSession] = []
 
-  init(firestore: Firestore = Firestore.firestore(), auth: Auth = Auth.auth()) {
+  private var listener: ListenerRegistration? {
+    willSet {
+      listener?.remove()
+    }
+  }
+  private var signInHandle: AnyObject? {
+    willSet {
+      if let handle = signInHandle {
+        signIn.removeGoogleSignInHandler(handle)
+      }
+    }
+  }
+  private var signOutHandle: AnyObject? {
+    willSet {
+      if let handle = signOutHandle {
+        signIn.removeGoogleSignOutHandler(handle)
+      }
+    }
+  }
+
+  /// The closure used to handle Firestore updates. This is stored so we can
+  /// automatically re-observe on auth change events.
+  private var updateHandler: (([ReservedSession], Error?) -> Void)?
+
+  /// Initializes an instance of RemoteReservationDataSource, but does not fetch data.
+  public init(firestore: Firestore = Firestore.firestore(),
+              signIn: SignInInterface = SignIn.sharedInstance) {
     self.firestore = firestore
-    self.auth = auth
+    self.signIn = signIn
+
+    observeSignInUpdates()
   }
 
-  // MARK: - ReservationDataSource
-
-  /// `onReservationUpdates` should be called before this method to start syncing values from
-  /// Firestore.
-  func retrieveReservations(_ callback: @escaping (_ reservations: [ReservedSession]) -> Void) {
-    callback(sessions)
+  /// Returns the reservation status for the given session, or .none if there is none.
+  public func reservationStatus(for sessionID: String) -> ReservationStatus {
+    return sessionsMap[sessionID] ?? .none
   }
 
-  func onReservationUpdates(_ callback: @escaping (_ reservations: [ReservedSession]) -> Void) {
-    guard let user = auth.currentUser else {
-      callback([])
+  private func buildSessionsMap(from sessions: [ReservedSession]) {
+    reservedSessions = sessions
+    sessionsMap.removeAll()
+    for session in sessions {
+      sessionsMap[session.id] = session.status
+    }
+  }
+
+  /// Fetches data from Firestore and passes all subsequent updates to the callback handler.
+  /// In certain non-Firestore events, such as sign out, the callback may be invoked with an
+  /// empty array and no error parameter. Calling this method twice will remove the
+  /// update handler from the first invocation.
+  func observeReservationUpdates(_ callback:
+      @escaping (_ reservations: [ReservedSession], Error?) -> Void) {
+    updateHandler = callback
+    guard let user = signIn.currentUpgradableUser else {
+      callback([], nil)
       return
     }
 
-    let query = firestore.userEvents(for: user)
-      .whereField("reservationStatus", isEqualTo: "RESERVED")
+    let query = firestore.reservations(for: user)
     listener = query.addSnapshotListener { [weak self] (querySnapshot, error) in
+      guard let self = self else { return }
+      defer {
+        NotificationCenter.default.post(name: .reservationUpdate, object: nil)
+      }
+
+      if error.map({ $0 as NSError })?.code == FirestoreErrorCode.permissionDenied.rawValue {
+        // Permission denied indicates an auth status change while the listener was active, or
+        // a bug in our security rules. If this is a security rules bug, automatically retrying here
+        // will be unproductive. In the case of a sign out, there may be no reservations to fetch.
+        // Don't retry after this error.
+        self.listener?.remove()
+        // Leaving updateHandler set to a nonnull value means this class will automatically
+        // restart this query listener on reauth.
+        print("Permissions error fetching reservations: \(error!)")
+        self.buildSessionsMap(from: [])
+        callback([], error)
+        return
+      }
       guard let snapshot = querySnapshot else {
         print("Error fetching reservations: \(error!)")
-        callback([])
+        self.buildSessionsMap(from: [])
+        callback([], error)
         return
       }
 
@@ -60,24 +121,56 @@ class RemoteReservationDataSource: ReservationDataSource {
         let data = document.data()
         let reservationStatus = (data["reservationStatus"] as? String)
             .flatMap(ReservationStatus.init(rawValue:))
-        let reservationTimestamp =
-            (data["reservationResult"] as? [String: Any])?["timestamp"] as? Int
-        guard let status = reservationStatus, let timestamp = reservationTimestamp else {
+        guard let status = reservationStatus else {
           print("Error: Unable to serialize reservation state: \(data)")
           return nil
         }
-        return ReservedSession(id: document.documentID, status: status, timestamp: timestamp)
+        return ReservedSession(id: document.documentID, status: status)
       })
       .filter({ $0 != nil })
       .map({ $0! })
 
-      self?.sessions = sessions
-      callback(sessions)
+      self.buildSessionsMap(from: sessions)
+      callback(sessions, nil)
     }
   }
 
+  /// Stops updates and releases the callback block previously passed into `observeReservationUpdates`.
+  /// After this method is invoked, `observeReservationUpdates` must be invoked again to fetch new data.
+  /// This method does not reset the receiver's local copy of reservations, which can result in
+  /// stale data.
+  func stopObservingUpdates() {
+    listener = nil
+    updateHandler = nil
+  }
+
   deinit {
-    listener?.remove()
+    listener = nil
+    stopObservingSignInUpdates()
+  }
+
+  // MARK: - SignIn callbacks
+
+  private func observeSignInUpdates() {
+    signInHandle = signIn.addGoogleSignInHandler(self) { [weak self] in
+      guard let self = self, let handler = self.updateHandler else { return }
+      self.observeReservationUpdates(handler)
+    }
+
+    signOutHandle = signIn.addGoogleSignOutHandler(self) { [weak self] in
+      guard let self = self else { return }
+      self.listener = nil
+      self.sessionsMap = [:]
+      self.reservedSessions = []
+
+      // Pass an empty update to the handler so this class's consumer doens't have stale data.
+      self.updateHandler?([], nil)
+    }
+  }
+
+  private func stopObservingSignInUpdates() {
+    signInHandle = nil
+    signOutHandle = nil
   }
 
 }

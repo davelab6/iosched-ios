@@ -21,11 +21,12 @@ class FilterBar: UIView {
 
   private enum Constants {
     static let filterHeader = NSLocalizedString("Filters:", comment: "Header for a list of filters")
-    static let filterHeaderColor = MDCPalette.grey.tint800
-    static let filterTextColor = MDCPalette.indigo.accent200!
-    static let resetButtonTitle = NSLocalizedString("Reset", comment: "Title for button that resets filters.")
-    static let resetButtonColor = MDCPalette.indigo.accent200!
-    static let backgroundColor = MDCPalette.grey.tint200
+    static let filterHeaderColor = UIColor(red: 66 / 255, green: 66 / 255, blue: 66 / 255, alpha: 1)
+    static let filterTextColor = UIColor(red: 26 / 255, green: 115 / 255, blue: 232 / 255, alpha: 1)
+    static let resetButtonTitle =
+        NSLocalizedString("Reset", comment: "Title for button that resets filters.")
+    static let resetButtonColor = UIColor(red: 26 / 255, green: 115 / 255, blue: 232 / 255, alpha: 1)
+    static let backgroundColor = UIColor(hex: 0xf8f9fa)
     static let filterTextLeftMargin: CGFloat = 24.0
     static let filterTextRightMargin: CGFloat = 20.0
     static let filterTextTopMargin: CGFloat = 14.0
@@ -38,7 +39,7 @@ class FilterBar: UIView {
       self.isHidden = !isFilterVisible
     }
   }
-  var scheduleViewModel: ScheduleViewModel?
+  let scheduleViewModel: SessionListViewModel
 
   var onReset: (() -> Void)?
   var onTapped: (() -> Void)?
@@ -49,18 +50,24 @@ class FilterBar: UIView {
   var filterText: String {
     didSet {
       let filter = Constants.filterHeader
-      let filterHeading = NSMutableAttributedString(string: filter, attributes: [NSAttributedStringKey.foregroundColor: Constants.filterHeaderColor])
-      let filterValue = NSMutableAttributedString(string: filterText, attributes: [NSAttributedStringKey.foregroundColor: Constants.filterTextColor])
-      filterHeading.appendString(" ")
+      let filterHeading = NSMutableAttributedString(string: filter, attributes: [NSAttributedString.Key.foregroundColor: Constants.filterHeaderColor])
+      let filterValue = NSMutableAttributedString(string: filterText, attributes: [NSAttributedString.Key.foregroundColor: Constants.filterTextColor])
+      filterHeading.append(NSAttributedString(string: " "))
       filterHeading.append(filterValue)
       filterLabel.attributedText = filterHeading
     }
   }
 
-  override init(frame: CGRect) {
+  init(frame: CGRect, viewModel: SessionListViewModel) {
     filterText = ""
+    scheduleViewModel = viewModel
     super.init(frame: frame)
     setupViews()
+    registerForDynamicTypeUpdates()
+  }
+
+  deinit {
+    NotificationCenter.default.removeObserver(self)
   }
 
   required init?(coder aDecoder: NSCoder) {
@@ -68,7 +75,7 @@ class FilterBar: UIView {
   }
 
   override func sizeThatFits(_ size: CGSize) -> CGSize {
-    let height: CGFloat = isFilterVisible ? 56.0 : 0.0
+    let height: CGFloat = isFilterVisible ? 56 : 0
     return CGSize(width: size.width, height: height)
   }
 
@@ -105,7 +112,8 @@ class FilterBar: UIView {
 
   private func setupLabel() -> UILabel {
     let label = UILabel()
-    label.font = MDCTypography.captionFont()
+    label.font = UIFont.mdc_preferredFont(forMaterialTextStyle: .caption)
+    label.enableAdjustFontForContentSizeCategory()
     label.numberOfLines = 0
     label.translatesAutoresizingMaskIntoConstraints = false
     let tapRecognizer = UITapGestureRecognizer(target: self, action: #selector(labelTapped))
@@ -114,14 +122,31 @@ class FilterBar: UIView {
   }
 
   @objc func resetTapped() {
-    guard let filterViewModel = scheduleViewModel?.filterViewModel else { return }
-    filterViewModel.reset()
+    scheduleViewModel.filterViewModel.reset()
     filterText = ""
     isFilterVisible = false
-    scheduleViewModel?.updateView(at: nil)
+    scheduleViewModel.updateView()
   }
 
   @objc func labelTapped(sender: UITapGestureRecognizer) {
-    scheduleViewModel?.didSelectFilter()
+    scheduleViewModel.didSelectFilter()
   }
+}
+
+// MARK: - Dynamic type
+
+extension FilterBar {
+
+  func registerForDynamicTypeUpdates() {
+    NotificationCenter.default.addObserver(self,
+                                           selector: #selector(dynamicTypeTextSizeDidChange(_:)),
+                                           name: UIContentSizeCategory.didChangeNotification,
+                                           object: nil)
+  }
+
+  @objc func dynamicTypeTextSizeDidChange(_ sender: Any) {
+    filterLabel.font = UIFont.mdc_preferredFont(forMaterialTextStyle: .caption)
+    setNeedsLayout()
+  }
+
 }

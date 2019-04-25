@@ -18,11 +18,6 @@ import UIKit
 import GoogleSignIn
 import MaterialComponents
 
-protocol SignInNavigatable {
-  func showLoginSuccessfulMessage(user: GIDGoogleUser)
-  func showLoginFailedMessage()
-}
-
 private enum Constants {
   static let signInSuccessful =
     NSLocalizedString("Signed in",
@@ -32,7 +27,7 @@ private enum Constants {
                       comment: "Sign in canceled by user")
 }
 
-extension SignInNavigatable {
+struct SignInBannerPresenter {
 
   func showLoginSuccessfulMessage(user: GIDGoogleUser) {
     var signedInText: String

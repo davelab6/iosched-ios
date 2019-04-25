@@ -44,23 +44,20 @@ class AcknowledgementsViewController: UIViewController {
     view.addSubview(textView)
     setupTextView()
     setupConstraints()
+    textView.isScrollEnabled = false
 
     navigationController?.navigationBar.titleTextAttributes = [
-      NSAttributedStringKey.foregroundColor: InfoViewController.Constants.titleColor,
-      NSAttributedStringKey.font: InfoViewController.Constants.titleFont
+      NSAttributedString.Key.foregroundColor: InfoViewController.Constants.titleColor,
+      NSAttributedString.Key.font: InfoViewController.Constants.titleFont
     ]
-  }
-
-  override func viewWillAppear(_ animated: Bool) {
-    super.viewWillAppear(animated)
-    textView.setContentOffset(CGPoint(x: 0, y: -textView.contentInset.top), animated: false)
   }
 
   override func viewDidAppear(_ animated: Bool) {
     super.viewDidAppear(animated)
+    textView.isScrollEnabled = true
     NotificationCenter.default.addObserver(self,
                                            selector: #selector(didChangePreferredContentSize(_:)),
-                                           name: .UIContentSizeCategoryDidChange,
+                                           name: UIContentSizeCategory.didChangeNotification,
                                            object: nil)
   }
 
@@ -96,8 +93,8 @@ class AcknowledgementsViewController: UIViewController {
     constraints.append(NSLayoutConstraint(item: textView,
                                           attribute: .top,
                                           relatedBy: .equal,
-                                          toItem: view,
-                                          attribute: .top,
+                                          toItem: topLayoutGuide,
+                                          attribute: .bottom,
                                           multiplier: 1,
                                           constant: 0))
     // text view left

@@ -16,7 +16,6 @@
 
 import Foundation
 import MaterialComponents
-import DTCoreText
 import Lottie
 
 class OnboardingWelcomeViewController: BaseOnboardingViewController {
@@ -27,26 +26,51 @@ class OnboardingWelcomeViewController: BaseOnboardingViewController {
     return .lightContent
   }
 
-  var animationFileName: String {
-    return "IO18_Logo"
+  private var image: UIImage? {
+    let relativeDate = IODateComparer.currentDateRelativeToIO()
+    switch relativeDate {
+    case .before:
+      return UIImage(named: "onboarding_pre")
+    case .during, .after:
+      return UIImage(named: "onboarding_during_post")
+    }
   }
 
-  override func setupHeaderView() -> LOTAnimationView {
-    let animationView = LOTAnimationView(name: animationFileName)
-    animationView.loopAnimation = true
-    animationView.contentMode = .scaleAspectFit
-    animationView.translatesAutoresizingMaskIntoConstraints = false
-    return animationView
+  override func setupHeaderView() -> UIImageView {
+    let imageView = UIImageView()
+    imageView.translatesAutoresizingMaskIntoConstraints = false
+    let image = UIImage(named: "onboarding_pre")
+    imageView.image = image
+    imageView.contentMode = .bottom
+    imageView.setContentHuggingPriority(.required, for: .vertical)
+    return imageView
   }
 
   override var titleText: String {
-    return NSLocalizedString("Welcome to Google I/O",
-                             comment: "Welcome text presented in the onboarding flow")
+    let relativeDate = IODateComparer.currentDateRelativeToIO()
+    switch relativeDate {
+    case .before:
+      return NSLocalizedString("Google I/O is coming",
+                               comment: "Welcome text presented in the onboarding flow before I/O begins")
+    case .during:
+      return NSLocalizedString("Google I/O",
+                               comment: "Welcome text presented in the onboarding flow during I/O")
+    case .after:
+      return NSLocalizedString("Watch the I/O '19 recap and checkout #io19 on social",
+                               comment: "Welcome text presented in the onboarding flow after I/O ends")
+    }
+
   }
 
   override var subtitleText: String {
-    return NSLocalizedString("May 8-10\nMountain View, CA",
-                             comment: "Date and location for Google I/O")
+    let relativeDate = IODateComparer.currentDateRelativeToIO()
+    switch relativeDate {
+    case .before, .during:
+      return NSLocalizedString("May 7-9, 2019\nMountain View, CA",
+                               comment: "Date and location for Google I/O")
+    case .after:
+      return ""
+    }
   }
 
   override var nextButtonTitle: String {
@@ -55,7 +79,7 @@ class OnboardingWelcomeViewController: BaseOnboardingViewController {
 
   override func viewWillAppear(_ animated: Bool) {
     super.viewWillAppear(animated)
-    if let animationView = headerView as? LOTAnimationView {
+    if let animationView = headerView as? AnimationView {
       animationView.play()
     }
   }

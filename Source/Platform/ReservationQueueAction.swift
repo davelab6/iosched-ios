@@ -21,9 +21,3 @@ enum ReservationQueueActionType: String {
   case swap = "swap"
   case cancel = "return"
 }
-
-struct ReservationQueueAction {
-  let sessionId: String
-  let action: ReservationQueueActionType
-  let requestId: String
-}
