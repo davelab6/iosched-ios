@@ -457,7 +457,6 @@
 				5D87882DB8489F0722DDDCA3 /* Pods-IOschedUITests.debug.xcconfig */,
 				62A92350980E2F0091F4EBAC /* Pods-IOschedUITests.release.xcconfig */,
 			);
-			name = Pods;
 			path = Pods;
 			sourceTree = "<group>";
 		};
@@ -1095,7 +1094,7 @@
 					884DBE8D1E5DAB0300905D8E = {
 						CreatedOnToolsVersion = 8.2.1;
 						LastSwiftMigration = 1010;
-						ProvisioningStyle = Manual;
+						ProvisioningStyle = Automatic;
 						SystemCapabilities = {
 							com.apple.BackgroundModes = {
 								enabled = 1;
@@ -1716,8 +1715,9 @@
 				CODE_SIGN_ENTITLEMENTS = IOsched/IOsched.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = EQHXZ8M8AV;
+				DEVELOPMENT_TEAM = 52399AKRWC;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/IOsched/Screens/Explore",
@@ -1778,10 +1778,10 @@
 					"-framework",
 					"\"UIKit\"",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.google.iosched.dev;
+				PRODUCT_BUNDLE_IDENTIFIER = com.google.iosched.gn;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE = "823e5820-b56a-45f9-8ef2-b9540dc51425";
-				PROVISIONING_PROFILE_SPECIFIER = "IO Schedule Dev";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_OBJC_BRIDGING_HEADER = "";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 4.2;
@@ -1798,8 +1798,9 @@
 				CODE_SIGN_ENTITLEMENTS = IOsched/IOsched.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer: Google Development (3F4Y5873JF)";
+				CODE_SIGN_STYLE = Automatic;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = EQHXZ8M8AV;
+				DEVELOPMENT_TEAM = 52399AKRWC;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/IOsched/Screens/Explore",
@@ -1860,10 +1861,10 @@
 					"-framework",
 					"\"UIKit\"",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.google.iosched.dev;
+				PRODUCT_BUNDLE_IDENTIFIER = com.google.iosched.gn;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE = "823e5820-b56a-45f9-8ef2-b9540dc51425";
-				PROVISIONING_PROFILE_SPECIFIER = "IO Schedule Dev";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_OBJC_BRIDGING_HEADER = "";
 				SWIFT_VERSION = 4.2;
 				TARGETED_DEVICE_FAMILY = "1,2";
