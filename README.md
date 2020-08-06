@@ -26,3 +26,6 @@ build and run the IOsched target.
     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
     See the License for the specific language governing permissions and
     limitations under the License.
+
+Note that `ProductSans-Regular.ttf` is not licensed under the Apache license,
+and remains "All Rights Reserved." 
